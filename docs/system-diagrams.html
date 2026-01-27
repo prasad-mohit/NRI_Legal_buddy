@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NRI Law Buddy – Process & Architecture</title>
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 2rem;
+        background: #fdfaf5;
+        color: #0f172a;
+      }
+      h1,
+      h2 {
+        color: #0f172a;
+      }
+      section {
+        margin-bottom: 3rem;
+        padding: 2rem;
+        border-radius: 24px;
+        background: #ffffff;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+      }
+      .callout {
+        margin-top: 1.5rem;
+        padding: 1rem 1.25rem;
+        border-left: 4px solid #0ea5e9;
+        background: rgba(14, 165, 233, 0.1);
+        border-radius: 12px;
+      }
+      ul {
+        line-height: 1.7;
+      }
+      .mermaid {
+        background: #0f172a;
+        color: #fef3c7;
+        border-radius: 16px;
+        padding: 1rem;
+        margin-top: 1.5rem;
+      }
+    </style>
+    <script>
+      mermaid.initialize({ startOnLoad: true, theme: "dark" });
+    </script>
+  </head>
+  <body>
+    <h1>NRI Law Buddy &mdash; Process Flow & Architecture</h1>
+    <p>
+      These diagrams capture the current concierge journey and the supporting Next.js +
+      API architecture that powers the prototype you have in this repo.
+    </p>
+
+    <section>
+      <h2>Client Journey &amp; Service Flow</h2>
+      <p>
+        The flow mirrors what a user experiences inside
+        <code>ClientPortal</code>: authentication, curated service selection, fee capture,
+        assignment, collaboration, and escrow governance.
+      </p>
+      <div class="mermaid">
+        graph TD
+          A[Secure login<br/>Country-aware routing] --> B[Service breadcrumb selection]
+          B --> C[Platform fee capture
+($50 flat)]
+          C --> D[Case manager dispatch]
+          D --> E[Practitioner assignment &amp; readiness]
+          E --> F[SecureMeet video consult scheduling]
+          F --> G[Document vault uploads + AI summaries]
+          G --> H[Escrow milestone automation]
+          H --> I[Progress timeline &amp; alerts]
+          I --> J[Client approvals &amp; handover]
+      </div>
+      <div class="callout">
+        <strong>Breadcrumbs in action:</strong> Hovering or selecting any service chip updates the
+        hero card, ensuring users understand scope, compliance, and turnaround before
+        paying the platform fee.
+      </div>
+    </section>
+
+    <section>
+      <h2>Solution Architecture</h2>
+      <p>
+        The prototype keeps everything local-first but abstracts the API layer so you can
+        later swap in durable storage or external SaaS. The diagram highlights the main
+        modules and data paths you have today.
+      </p>
+      <div class="mermaid">
+        graph LR
+          subgraph Client
+            U[Browser
+(Next.js App Router)]
+            Z[Zustand Store]
+          end
+          subgraph Platform
+            FE[Client Components<br/>Hero, Breadcrumbs, SecureMeet preview]
+            API[Next.js API Routes<br/>/api/cases]
+            STORE[In-memory Case Store]
+          end
+          subgraph Integrations
+            EXT[(Future services:
+Auth, Payments,
+Doc intelligence,
+Video infra)]
+          end
+          U --> FE
+          FE --> Z
+          Z -->|fetch via api-client| API
+          API --> STORE
+          API -.planned webhooks/API.- EXT
+          FE -->|SecureMeet launch link| EXT
+          Z -->|Optimistic updates| FE
+      </div>
+      <ul>
+        <li><strong>React + Zustand:</strong> Keeps the concierge state machine on the client while calling APIs when available.</li>
+        <li><strong>API client guardrails:</strong> `api-client.ts` throws a clear error when no base URL exists (e.g., in Vitest) and logs graceful fallbacks.</li>
+        <li><strong>SecureMeet preview:</strong> The UI launches the actual video URL so plugging in real RTC infra later only needs an updated link/token.</li>
+      </ul>
+    </section>
+  </body>
+</html>

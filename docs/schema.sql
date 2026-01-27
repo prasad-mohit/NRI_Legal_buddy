@@ -1,0 +1,89 @@
+-- NRI Law Buddy SQLite schema (Prisma-aligned)
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS User (
+  id TEXT PRIMARY KEY NOT NULL,
+  fullName TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  country TEXT NOT NULL,
+  passwordHash TEXT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS AdminUser (
+  id TEXT PRIMARY KEY NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  displayName TEXT NOT NULL,
+  role TEXT NOT NULL,
+  passwordHash TEXT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS "Case" (
+  id TEXT PRIMARY KEY NOT NULL,
+  userId TEXT NOT NULL,
+  serviceId TEXT NOT NULL,
+  stage TEXT NOT NULL,
+  platformFeePaid INTEGER NOT NULL DEFAULT 0,
+  paymentStatus TEXT NOT NULL DEFAULT 'pending',
+  caseDetails TEXT,
+  caseSummary TEXT,
+  caseManagerMeta TEXT,
+  practitionerMeta TEXT,
+  caseManagerId TEXT,
+  practitionerId TEXT,
+  videoSlot TEXT,
+  videoLink TEXT,
+  documentCount INTEGER NOT NULL DEFAULT 0,
+  escrowMilestones TEXT NOT NULL,
+  timeline TEXT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (userId) REFERENCES User(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS CaseManager (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  specialization TEXT NOT NULL,
+  weeklyLoad INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS Practitioner (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  bar TEXT NOT NULL,
+  focus TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS VaultDocument (
+  id TEXT PRIMARY KEY NOT NULL,
+  caseId TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  uploadedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (caseId) REFERENCES "Case"(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS VideoReservation (
+  id TEXT PRIMARY KEY NOT NULL,
+  caseId TEXT NOT NULL,
+  scheduledAt TEXT NOT NULL,
+  link TEXT NOT NULL,
+  createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (caseId) REFERENCES "Case"(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_userId ON "Case"(userId);
+CREATE INDEX IF NOT EXISTS idx_document_caseId ON VaultDocument(caseId);
+CREATE INDEX IF NOT EXISTS idx_video_caseId ON VideoReservation(caseId);
+
+CREATE TRIGGER IF NOT EXISTS trg_case_updatedAt
+AFTER UPDATE ON "Case"
+FOR EACH ROW
+BEGIN
+  UPDATE "Case" SET updatedAt = CURRENT_TIMESTAMP WHERE id = OLD.id;
+END;
