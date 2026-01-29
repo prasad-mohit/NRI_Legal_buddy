@@ -87,6 +87,8 @@ scripts/               # SQL.js schema tooling
 npm install
 ```
 
+> **Note:** This repository does not include `package-lock.json` to ensure dependencies are installed from your local npm registry. Your first `npm install` will generate a fresh `package-lock.json` based on your environment.
+
 ### Database setup (required)
 
 ```bash
