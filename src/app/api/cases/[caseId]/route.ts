@@ -45,16 +45,6 @@ export async function GET(_: Request, { params }: { params: { caseId: string } }
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
-  const stageStatus = normalizeStageStatus(record.stageStatus as any);
-  const isLawyer = auth.session!.effectiveRole === "lawyer";
-  if (isLawyer && (body.document || body.escrowAdvance)) {
-    if (stageStatus !== "PAID") {
-      return NextResponse.json(
-        { message: "Stage execution locked until payment is marked PAID" },
-        { status: 403 }
-      );
-    }
-  }
   return NextResponse.json(record);
 }
 
