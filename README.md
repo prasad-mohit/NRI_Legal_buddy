@@ -91,14 +91,12 @@ npm install
 
 ### Database setup (required)
 
-```bash
-npm run db:apply-schema
-npm run db:seed-admin
-```
+Set credentials for the first admin before seeding:
 
-Default admin credentials:
-- `admin@nri-law-buddy.com`
-- `ChangeMe123!`
+```bash
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='Strong#Pass123' npm run db:apply-schema
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='Strong#Pass123' npm run db:seed-admin
+```
 
 ### Run the app
 

@@ -2,8 +2,9 @@ import { randomUUID } from "crypto";
 
 import prisma from "@/server/db";
 import { hashPassword, normalizeEmail, verifyPassword } from "@/server/auth";
+import { ensureRuntimeSchema } from "@/server/runtime-schema";
 
-interface AdminRow {
+export interface AdminRow {
   id: string;
   email: string;
   displayName: string;
@@ -18,6 +19,7 @@ export const createAdminUser = async (params: {
   role: string;
   password: string;
 }) => {
+  await ensureRuntimeSchema();
   const email = normalizeEmail(params.email);
   const passwordHash = hashPassword(params.password);
   const id = `ADMIN-${randomUUID()}`;
@@ -35,6 +37,7 @@ export const createAdminUser = async (params: {
 };
 
 export const listAdminUsers = async () => {
+  await ensureRuntimeSchema();
   const rows = await prisma.$queryRaw<AdminRow[]>`
     SELECT id, email, displayName, role, createdAt
     FROM AdminUser
@@ -44,6 +47,7 @@ export const listAdminUsers = async () => {
 };
 
 export const verifyAdminLogin = async (email: string, password: string) => {
+  await ensureRuntimeSchema();
   const rows = await prisma.$queryRaw<AdminRow[]>`
     SELECT id, email, displayName, role, passwordHash
     FROM AdminUser
@@ -60,4 +64,35 @@ export const verifyAdminLogin = async (email: string, password: string) => {
     displayName: record.displayName,
     role: record.role,
   };
+};
+
+export const findAdminByEmail = async (email: string) => {
+  await ensureRuntimeSchema();
+  const rows = await prisma.$queryRaw<AdminRow[]>`
+    SELECT id, email, displayName, role, passwordHash, createdAt
+    FROM AdminUser
+    WHERE email = ${normalizeEmail(email)}
+    LIMIT 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName,
+    role: row.role,
+  };
+};
+
+export const updateAdminPasswordHashByEmail = async (params: {
+  email: string;
+  passwordHash: string;
+}) => {
+  await ensureRuntimeSchema();
+  const result = await prisma.$executeRaw`
+    UPDATE AdminUser
+    SET passwordHash = ${params.passwordHash}
+    WHERE email = ${normalizeEmail(params.email)}
+  `;
+  return Number(result) > 0;
 };

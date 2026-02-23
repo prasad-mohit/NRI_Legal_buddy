@@ -1,3 +1,20 @@
+export type CaseStatus =
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "AWAITING_CLIENT_APPROVAL"
+  | "PAYMENT_PENDING"
+  | "IN_PROGRESS"
+  | "CLOSED";
+
+export type StageStatus =
+  | "PENDING"
+  | "AWAITING_PAYMENT"
+  | "PAYMENT_SUBMITTED"
+  | "PAID"
+  | "IN_PROGRESS"
+  | "COMPLETE";
+
+// Retain historical stage labels while we migrate to StageStatus-backed workflow.
 export type CaseStage =
   | "service-selection"
   | "fee-payment"
@@ -5,7 +22,8 @@ export type CaseStage =
   | "practitioner-assigned"
   | "video-scheduled"
   | "documents"
-  | "escrow";
+  | "escrow"
+  | StageStatus;
 
 export interface ClientProfile {
   fullName: string;
@@ -18,6 +36,8 @@ export interface CaseRecord {
   user: ClientProfile;
   serviceId: string;
   stage: CaseStage;
+  caseStatus: CaseStatus;
+  stageStatus: StageStatus;
   platformFeePaid: boolean;
   paymentStatus: "pending" | "approved";
   caseDetails?: string;
@@ -49,6 +69,17 @@ export interface CaseRecord {
     timestamp: string;
     status?: "done" | "live" | "upcoming";
   }>;
+  bankInstructions?: string;
+  paymentPlan?: string;
+  paymentProofs?: Array<{
+    id: string;
+    submittedBy: string;
+    submittedAt: string;
+    url?: string;
+    note?: string;
+    approved?: boolean;
+  }>;
+  terms?: string;
 }
 
 export interface VideoReservation {

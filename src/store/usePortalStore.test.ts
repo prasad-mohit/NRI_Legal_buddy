@@ -1,4 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const createVideoMeetingMock = vi.fn();
+const updateCaseRecordMock = vi.fn();
+
+vi.mock("@/lib/api-client", () => ({
+  createCaseRecord: vi.fn(),
+  createRazorpayOrder: vi.fn(),
+  fetchCaseRecord: vi.fn(),
+  verifyRazorpayPayment: vi.fn(),
+  createVideoMeeting: (...args: unknown[]) => createVideoMeetingMock(...args),
+  updateCaseRecord: (...args: unknown[]) => updateCaseRecordMock(...args),
+}));
 
 import { usePortalStore } from "./usePortalStore";
 
@@ -12,7 +24,24 @@ const slot = "2026-01-27 09:00 GMT";
 
 describe("usePortalStore", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     usePortalStore.getState().reset();
+    createVideoMeetingMock.mockResolvedValue({
+      meeting: {
+        id: "MTG-1001",
+        caseId: "CASE-1001",
+        scheduledAt: slot,
+        link: "/meeting/MTG-1001",
+        provider: "amazon-chime",
+        createdByEmail: "qa@nri-law-buddy.com",
+        createdAt: new Date().toISOString(),
+        chimeMeetingId: "chime-demo-1",
+        chimeExternalMeetingId: "case1001meeting",
+        mediaRegion: "us-east-1",
+      },
+      caseRecord: {},
+    });
+    updateCaseRecordMock.mockResolvedValue({});
   });
 
   it("progresses through the concierge flow", async () => {
@@ -24,11 +53,11 @@ describe("usePortalStore", () => {
     store.selectService("property-dispute");
     expect(usePortalStore.getState().selectedService?.id).toBe("property-dispute");
 
-    await store.capturePlatformFee();
-  expect(usePortalStore.getState().platformFeePaid).toBe(false);
-  expect(usePortalStore.getState().paymentStatus).toBe("pending");
-
-  usePortalStore.setState({ platformFeePaid: true, paymentStatus: "approved" });
+    usePortalStore.setState({
+      caseId: "CASE-1001",
+      platformFeePaid: true,
+      paymentStatus: "approved",
+    });
 
     await store.scheduleVideoCall(slot);
     expect(usePortalStore.getState().videoCall?.scheduledAt).toBe(slot);

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   ArrowUpRight,
   BadgeCheck,
   CalendarCheck,
   Camera,
-  Castle,
   CheckCircle2,
   ChevronRight,
   CreditCard,
@@ -44,9 +43,14 @@ const cardShell =
 export function ClientPortal() {
   const user = usePortalStore((state) => state.user);
   const authRole = usePortalStore((state) => state.authRole);
+  const hydrateAuthSession = usePortalStore((state) => state.hydrateAuthSession);
 
   useEffect(() => {
-    if (authRole === "admin") {
+    void hydrateAuthSession();
+  }, [hydrateAuthSession]);
+
+  useEffect(() => {
+    if (authRole === "admin" || authRole === "super-admin") {
       window.location.assign("/admin");
     }
   }, [authRole]);
@@ -55,8 +59,18 @@ export function ClientPortal() {
     <div className="min-h-screen bg-[#f8fafc] text-slate-900">
       <div className="mx-auto max-w-6xl px-4 py-10 lg:px-8">
         <TopBar />
-        <HeroBanner loggedIn={Boolean(user)} />
-        <div className="mt-8">{user ? <PortalWorkspace /> : <SignupSection />}</div>
+        {user ? (
+          <div className="mt-6">
+            <PortalWorkspace />
+          </div>
+        ) : (
+          <>
+            <HeroBanner loggedIn={false} />
+            <div className="mt-8">
+              <SignupSection />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -65,7 +79,7 @@ export function ClientPortal() {
 function TopBar() {
   const [open, setOpen] = useState(false);
   const user = usePortalStore((state) => state.user);
-  const reset = usePortalStore((state) => state.reset);
+  const logoutUser = usePortalStore((state) => state.logoutUser);
 
   return (
     <div className="mb-6 flex items-center justify-between">
@@ -82,7 +96,7 @@ function TopBar() {
         {user ? (
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={() => void logoutUser()}
             className="inline-flex items-center gap-2 rounded-full border border-slate-900 px-4 py-2 text-sm font-semibold text-slate-900"
           >
             <LogOut className="h-4 w-4" /> Log out
@@ -104,45 +118,49 @@ function TopBar() {
 
 function HeroBanner({ loggedIn }: { loggedIn: boolean }) {
   const stats = [
-  { label: "Global hubs", value: "37", detail: "24x7 coverage" },
-  { label: "Verified counsel", value: "220+", detail: "High Court empanelled" },
-  { label: "Escrow partners", value: "05", detail: "Regulated institutions" },
-  { label: "Response SLA", value: "< 4 hrs", detail: "Initial intake" },
+    { label: "Global hubs", value: "37", detail: "24x7 coverage" },
+    { label: "Verified counsel", value: "220+", detail: "High Court empanelled" },
+    { label: "Escrow partners", value: "05", detail: "Regulated institutions" },
+    { label: "Response SLA", value: "< 4 hrs", detail: "Initial intake" },
   ];
 
   const focusAreas = [
-  { Icon: LandPlot, label: "Property & title" },
-  { Icon: Scale, label: "Litigation & escrow" },
-  { Icon: Gavel, label: "Probate & estate" },
-  { Icon: Globe2, label: "Cross-border advisory" },
+    { Icon: LandPlot, label: "Property & title" },
+    { Icon: Scale, label: "Litigation & escrow" },
+    { Icon: Gavel, label: "Probate & estate" },
+    { Icon: Globe2, label: "Cross-border advisory" },
   ];
 
   return (
-    <header className={clsx(cardShell, "relative overflow-hidden p-8 lg:p-10")}>
-      <div className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-slate-100/60 via-transparent to-blue-100/40" />
-      <div className="relative z-10 grid gap-8 lg:grid-cols-[1.5fr_1fr]">
-        <div className="space-y-5">
-          <div className="inline-flex items-center gap-2 rounded-full bg-blue-100/80 px-4 py-1 text-sm font-medium text-blue-800">
+    <header className="relative overflow-hidden rounded-[32px] border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-800 px-6 py-10 text-amber-50 shadow-[0_30px_80px_rgba(0,0,0,0.25)]">
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute -left-20 top-10 h-64 w-64 rounded-full bg-amber-400 blur-3xl" />
+        <div className="absolute right-0 bottom-0 h-64 w-64 rounded-full bg-blue-300 blur-3xl" />
+      </div>
+      <div className="relative z-10 grid gap-10 lg:grid-cols-[1.6fr_1fr]">
+        <div className="space-y-6">
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-400/20 px-4 py-1 text-sm font-medium text-amber-100">
             <Sparkles className="h-4 w-4" /> Global NRI legal command center
           </div>
-          <h1 className="text-3xl font-semibold leading-tight text-slate-900 md:text-4xl">
-            Formal legal coordination for cross-border property, family, and estate matters.
+          <h1 className="text-4xl font-semibold leading-tight text-white md:text-5xl">
+            Cross-border legal ops, escrow, and counsel — orchestrated in one portal.
           </h1>
-          <p className="text-lg text-slate-600">
-            Case managers, vetted advocates, escrow compliance, and secure document intelligence delivered in a single, auditable workspace.
+          <p className="text-lg text-slate-100/80">
+            Case managers, vetted advocates, escrow compliance, and secure document intelligence
+            delivered in a single, auditable workspace.
           </p>
-          <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+          <div className="flex flex-wrap gap-3 text-sm text-slate-100/90">
             {focusAreas.map(({ Icon, label }) => (
               <span
                 key={label}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1"
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1"
               >
-                <Icon className="h-4 w-4 text-slate-700" />
+                <Icon className="h-4 w-4 text-amber-200" />
                 {label}
               </span>
             ))}
           </div>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-100/70">
             {loggedIn
               ? "You are signed in. Continue the workflow modules below."
               : "Authenticate below to access your secure client workspace."}
@@ -152,11 +170,11 @@ function HeroBanner({ loggedIn }: { loggedIn: boolean }) {
           {stats.map((metric) => (
             <div
               key={metric.label}
-              className="rounded-2xl border border-white/70 bg-white/80 p-5 text-center shadow-inner"
+              className="rounded-3xl border border-white/10 bg-white/10 p-5 text-center shadow-inner backdrop-blur"
             >
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{metric.label}</p>
-              <p className="text-3xl font-semibold text-slate-900">{metric.value}</p>
-              <p className="text-xs text-slate-500">{metric.detail}</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-amber-200">{metric.label}</p>
+              <p className="text-3xl font-semibold text-white">{metric.value}</p>
+              <p className="text-xs text-amber-100/80">{metric.detail}</p>
             </div>
           ))}
         </div>
@@ -201,10 +219,9 @@ function LoginModal({ onClose }: { onClose: () => void }) {
   const authLoading = usePortalStore((state) => state.authLoading);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "reset">("login");
-  const [newPassword, setNewPassword] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
-  const [resetError, setResetError] = useState<string | null>(null);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -214,143 +231,264 @@ function LoginModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const handleReset = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setResetError(null);
-    setNotice(null);
-    const res = await fetch("/api/auth/reset", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, newPassword }),
-    });
-    if (!res.ok) {
-      const message = await res.text();
-      setResetError(message || "Reset failed");
-      return;
-    }
-    setNotice("Password updated. Please sign in.");
-    setMode("login");
-    setPassword("");
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4">
-      <form
-        onSubmit={mode === "login" ? handleLogin : handleReset}
-        className={clsx(cardShell, "w-full max-w-md space-y-4 p-6")}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900/70 via-slate-900/60 to-blue-900/60 px-4 backdrop-blur">
+      <div
+        className={clsx(
+          "w-full max-w-md space-y-4 overflow-hidden rounded-3xl border border-slate-800/60 bg-slate-900/70 p-6 shadow-[0_25px_80px_rgba(0,0,0,0.45)]",
+          "backdrop-blur"
+        )}
       >
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">
-            {mode === "login" ? "Log in" : "Reset password"}
-          </h3>
-          <button type="button" onClick={onClose} className="text-sm text-slate-500">
-            Close
-          </button>
-        </div>
-        <label className="block text-sm text-slate-600">
-          Email
-          <input
-            className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </label>
         {mode === "login" ? (
-          <>
-            <label className="block text-sm text-slate-600">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Log in</h3>
+              <button type="button" onClick={onClose} className="text-sm text-slate-400">
+                Close
+              </button>
+            </div>
+            <label className="block text-sm text-slate-300">
+              Email
+              <input
+                className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm text-slate-300">
               Password
               <input
-                type="password"
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
+                type={showPassword ? "text" : "password"}
+                className="mt-2 w-full rounded-2xl border border-slate-700 bg-slate-800 px-3 py-2 text-slate-100 placeholder:text-slate-500"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="mt-1 text-xs text-amber-200 underline"
+              >
+                {showPassword ? "Hide password" : "Show password"}
+              </button>
             </label>
             {authError && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              <div className="rounded-2xl border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
                 {authError}
               </div>
             )}
             {notice && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+              <div className="rounded-2xl border border-emerald-400/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
                 {notice}
               </div>
             )}
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-50 disabled:opacity-50"
+              className="w-full rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 text-sm font-semibold text-slate-900 shadow-lg shadow-amber-500/30 disabled:opacity-50"
             >
               {authLoading ? "Signing in..." : "Log in"}
             </button>
             <button
               type="button"
-              onClick={() => setMode("reset")}
-              className="text-xs text-slate-500 underline"
+              onClick={() => {
+                setMode("reset");
+                setNotice(null);
+              }}
+              className="text-xs text-slate-400 underline"
             >
               Forgot password?
             </button>
-          </>
+          </form>
         ) : (
-          <>
-            <label className="block text-sm text-slate-600">
-              New password
-              <input
-                type="password"
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-              />
-            </label>
-            {resetError && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                {resetError}
-              </div>
-            )}
-            <button
-              type="submit"
-              className="w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-50"
-            >
-              Reset password
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("login")}
-              className="text-xs text-slate-500 underline"
-            >
-              Back to login
-            </button>
-          </>
+          <PasswordResetFlow
+            onBack={() => setMode("login")}
+            onClose={onClose}
+            onCompleted={() => {
+              setMode("login");
+              setNotice("Password updated. Please sign in with your new password.");
+            }}
+          />
         )}
-      </form>
+      </div>
+    </div>
+  );
+}
+
+function PasswordResetFlow(props: {
+  onBack: () => void;
+  onClose: () => void;
+  onCompleted: () => void;
+}) {
+  const [phase, setPhase] = useState<"request" | "verify">("request");
+  const [email, setEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [testOtp, setTestOtp] = useState<string | null>(null);
+
+  const handleRequestOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    const res = await fetch("/api/auth/reset/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, newPassword }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { message?: string; testOtp?: string };
+    if (!res.ok) {
+      setError(data.message ?? "Unable to start password reset");
+      setLoading(false);
+      return;
+    }
+    setPhase("verify");
+    setTestOtp(data.testOtp ?? null);
+    setLoading(false);
+  };
+
+  const handleVerifyOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+    const res = await fetch("/api/auth/reset/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    if (!res.ok) {
+      setError(data.message ?? "Unable to verify reset code");
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+    props.onCompleted();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Reset password</h3>
+        <button type="button" onClick={props.onClose} className="text-sm text-slate-500">
+          Close
+        </button>
+      </div>
+      {phase === "request" ? (
+        <form onSubmit={handleRequestOtp} className="space-y-3">
+          <label className="block text-sm text-slate-600">
+            Email
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label className="block text-sm text-slate-600">
+            New password
+            <input
+              type="password"
+              className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+            />
+          </label>
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {error}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-50 disabled:opacity-50"
+          >
+            {loading ? "Sending code..." : "Send OTP"}
+          </button>
+          <button
+            type="button"
+            onClick={props.onBack}
+            className="text-xs text-slate-500 underline"
+          >
+            Back to login
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtp} className="space-y-3">
+          <label className="block text-sm text-slate-600">
+            OTP code
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value)}
+              placeholder="Enter 6-digit code"
+            />
+          </label>
+          {testOtp && (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              Dev OTP: {testOtp}
+            </div>
+          )}
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {error}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-50 disabled:opacity-50"
+          >
+            {loading ? "Verifying..." : "Verify and reset password"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPhase("request");
+              setOtp("");
+              setError(null);
+            }}
+            className="text-xs text-slate-500 underline"
+          >
+            Request new code
+          </button>
+        </form>
+      )}
     </div>
   );
 }
 
 function SignupPanel() {
-  const signupUser = usePortalStore((state) => state.signupUser);
+  const startSignupOtp = usePortalStore((state) => state.startSignupOtp);
+  const verifySignupOtp = usePortalStore((state) => state.verifySignupOtp);
   const authError = usePortalStore((state) => state.authError);
   const authLoading = usePortalStore((state) => state.authLoading);
   const [fullName, setFullName] = useState("Aarav Patel");
   const [email, setEmail] = useState("aarav@example.com");
   const [country, setCountry] = useState("Canada");
   const [password, setPassword] = useState("ChangeMe123!");
-  const [loading, setLoading] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [phase, setPhase] = useState<"details" | "verify">("details");
+  const [testOtp, setTestOtp] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    await signupUser({ fullName, email, country, password });
-    if (mountedRef.current) {
-      setLoading(false);
+    setNotice(null);
+    if (phase === "details") {
+      const result = await startSignupOtp({ fullName, email, country, password });
+      if (result) {
+        setPhase("verify");
+        setEmail(result.email);
+        setTestOtp(result.testOtp ?? null);
+        setNotice(`Verification code sent. It expires in ${result.expiresInMinutes} minutes.`);
+      }
+      return;
+    }
+    const verified = await verifySignupOtp({ email, otp });
+    if (verified) {
+      setNotice("Account verified. Redirecting to workspace...");
     }
   };
 
@@ -366,51 +504,109 @@ function SignupPanel() {
         Client Registration
       </p>
       <h2 className="text-2xl font-semibold">Create your client account</h2>
-      <label className="block text-sm text-slate-600">
-        Full legal name
-        <input
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-        />
-      </label>
-      <label className="block text-sm text-slate-600">
-        Email
-        <input
-          type="email"
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </label>
-      <label className="block text-sm text-slate-600">
-        Password
-        <input
-          type="password"
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-      <label className="block text-sm text-slate-600">
-        Country of residence
-        <input
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-        />
-      </label>
+      {phase === "details" ? (
+        <>
+          <label className="block text-sm text-slate-600">
+            Full legal name
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </label>
+          <label className="block text-sm text-slate-600">
+            Email
+            <input
+              type="email"
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className="block text-sm text-slate-600">
+            Password
+            <input
+              type={showPassword ? "text" : "password"}
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="mt-1 text-xs text-slate-500 underline"
+            >
+              {showPassword ? "Hide password" : "Show password"}
+            </button>
+          </label>
+          <label className="block text-sm text-slate-600">
+            Country of residence
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="block text-sm text-slate-600">
+            Email
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900"
+              value={email}
+              readOnly
+            />
+          </label>
+          <label className="block text-sm text-slate-600">
+            Verification code
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:outline-none"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              placeholder="Enter 6-digit OTP"
+            />
+          </label>
+          {testOtp && (
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              Dev OTP: {testOtp}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setPhase("details");
+              setOtp("");
+              setNotice(null);
+            }}
+            className="text-xs text-slate-500 underline"
+          >
+            Edit signup details
+          </button>
+        </>
+      )}
       {authError && (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
           {authError}
         </div>
       )}
+      {notice && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+          {notice}
+        </div>
+      )}
       <button
         type="submit"
-        disabled={loading || authLoading}
+        disabled={authLoading}
         className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-base font-semibold text-blue-50 transition hover:bg-black disabled:opacity-50"
       >
-        {loading || authLoading ? "Creating account..." : "Create account"}
+        {authLoading
+          ? phase === "details"
+            ? "Sending OTP..."
+            : "Verifying OTP..."
+          : phase === "details"
+            ? "Create account"
+            : "Verify and continue"}
         <Fingerprint className="h-4 w-4" />
       </button>
       <p className="text-xs text-slate-500">
@@ -422,37 +618,166 @@ function SignupPanel() {
 
 function PortalWorkspace() {
   const caseId = usePortalStore((state) => state.caseId);
+  const syncCases = usePortalStore((state) => state.syncCases);
+  const stage = usePortalStore((state) => state.stage);
+  const paymentStatus = usePortalStore((state) => state.paymentStatus);
+  const platformFeePaid = usePortalStore((state) => state.platformFeePaid);
   const refreshCaseStatus = usePortalStore((state) => state.refreshCaseStatus);
+  const caseStatus = usePortalStore((state) => state.caseStatus);
+  const stageStatus = usePortalStore((state) => state.stageStatus);
 
   useEffect(() => {
     if (caseId) {
       void refreshCaseStatus();
+    } else {
+      void syncCases();
     }
-  }, [caseId, refreshCaseStatus]);
+  }, [caseId, refreshCaseStatus, syncCases]);
+
+  useEffect(() => {
+    console.log("[debug][portal] render PortalWorkspace", {
+      caseId,
+      stage,
+      paymentStatus,
+      platformFeePaid,
+      caseStatus,
+      stageStatus,
+    });
+  }, [caseId, stage, paymentStatus, platformFeePaid, caseStatus, stageStatus]);
+
+  const renderByStatus = () => {
+    switch (caseStatus) {
+      case "SUBMITTED":
+        return (
+          <StatusCard
+            title="Waiting for assignment"
+            message="Your case is logged. A case manager will be assigned shortly."
+            tone="info"
+          />
+        );
+      case "UNDER_REVIEW":
+        return (
+          <StatusCard
+            title="Under review"
+            message="Operations is reviewing your brief. You'll receive a plan for approval."
+            tone="info"
+          />
+        );
+      case "AWAITING_CLIENT_APPROVAL":
+        return <LegalPlanPanel />;
+      case "PAYMENT_PENDING":
+        return <PaymentSchedule />;
+      case "IN_PROGRESS":
+        return (
+          <div className="space-y-8">
+            <CaseTimeline />
+            <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+              <DocumentVault />
+              <VideoScheduler />
+            </section>
+          </div>
+        );
+      case "CLOSED":
+        return <FinalSummary />;
+      default:
+        return (
+          <StatusCard
+            title="No active case"
+            message="Start by submitting your details. Status will update automatically."
+            tone="muted"
+          />
+        );
+    }
+  };
 
   return (
     <div className="space-y-8">
       <JourneySnapshot />
-      <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <ServiceCatalog />
-        <RightColumn />
-      </section>
-      <CaseIntake />
-      <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <CaseTimeline />
-        <EscrowTracker />
-      </section>
-      <section className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        <DocumentVault />
-        <VideoScheduler />
-      </section>
+      {renderByStatus()}
     </div>
+  );
+}
+
+function StatusCard({
+  title,
+  message,
+  tone,
+}: {
+  title: string;
+  message: string;
+  tone: "info" | "muted";
+}) {
+  const toneClasses =
+    tone === "info"
+      ? "border-blue-200 bg-blue-50 text-blue-900"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+  return (
+    <section className={clsx(cardShell, "p-6 lg:p-8", toneClasses)}>
+      <h3 className="text-xl font-semibold">{title}</h3>
+      <p className="mt-2 text-sm">{message}</p>
+    </section>
+  );
+}
+
+function LegalPlanPanel() {
+  const caseSummary = usePortalStore((state) => state.caseSummary);
+  const paymentPlan = usePortalStore((state) => state.paymentPlan);
+  const terms = usePortalStore((state) => state.terms);
+
+  return (
+    <section className={clsx(cardShell, "space-y-4 p-6 lg:p-8")}>
+      <h3 className="text-xl font-semibold">Review and approve plan</h3>
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 whitespace-pre-line">
+        {caseSummary || "Plan will appear once prepared by the case team."}
+      </div>
+      {paymentPlan && (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900 whitespace-pre-line">
+          <p className="font-semibold text-slate-900">Payment plan</p>
+          {paymentPlan}
+        </div>
+      )}
+      {terms && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900 whitespace-pre-line">
+          <p className="font-semibold text-slate-900">Terms</p>
+          {terms}
+        </div>
+      )}
+      <p className="text-xs text-slate-500">
+        Approve the plan via your account manager. Status will move to payment pending once accepted.
+      </p>
+    </section>
+  );
+}
+
+function FinalSummary() {
+  const caseSummary = usePortalStore((state) => state.caseSummary);
+  const timeline = usePortalStore((state) => state.timeline);
+  return (
+    <section className={clsx(cardShell, "space-y-4 p-6 lg:p-8")}>
+      <h3 className="text-xl font-semibold">Final summary</h3>
+      <p className="text-sm text-slate-700">
+        Engagement is closed. Download the highlights below for your records.
+      </p>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 whitespace-pre-line">
+        {caseSummary || "Summary unavailable."}
+      </div>
+      <div className="space-y-2">
+        {timeline.slice(-5).map((event) => (
+          <div key={event.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+            <p className="font-semibold text-slate-900">{event.title}</p>
+            <p className="text-slate-600">{event.description}</p>
+            <p className="text-slate-500">{event.timestamp}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
 function JourneySnapshot() {
   const user = usePortalStore((state) => state.user);
   const stage = usePortalStore((state) => state.stage);
+  const caseStatus = usePortalStore((state) => state.caseStatus);
   const selectedService = usePortalStore((state) => state.selectedService);
 
   const stageCopy: Record<string, string> = {
@@ -480,6 +805,11 @@ function JourneySnapshot() {
           <span className="rounded-full bg-slate-900 px-3 py-1 text-sm font-semibold text-amber-50">
             {stageCopy[stage]}
           </span>
+          {caseStatus && (
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-900">
+              {caseStatus.replace(/_/g, " ")}
+            </span>
+          )}
           {selectedService && (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-900">
               {selectedService.label}
@@ -495,19 +825,30 @@ function ServiceCatalog() {
   const selectedService = usePortalStore((state) => state.selectedService);
   const selectService = usePortalStore((state) => state.selectService);
   const platformFeePaid = usePortalStore((state) => state.platformFeePaid);
+  const paymentCaptured = usePortalStore((state) => state.paymentCaptured);
   const paymentStatus = usePortalStore((state) => state.paymentStatus);
+  const paymentActionState = usePortalStore((state) => state.paymentActionState);
+  const paymentActionMessage = usePortalStore((state) => state.paymentActionMessage);
   const caseId = usePortalStore((state) => state.caseId);
   const capturePlatformFee = usePortalStore((state) => state.capturePlatformFee);
   const [previewService, setPreviewService] = useState<ServiceId | null>(null);
 
   const paymentRequested = Boolean(caseId);
   const feeDisabled =
-    !selectedService || platformFeePaid || (paymentRequested && paymentStatus === "pending");
-  const feeLabel = platformFeePaid
-    ? "Payment approved"
-    : paymentRequested
-      ? "Awaiting admin approval"
-      : "Pay $50 platform fee";
+    !selectedService ||
+    platformFeePaid ||
+    paymentCaptured ||
+    paymentActionState === "loading";
+  const feeLabel =
+    paymentActionState === "loading"
+      ? "Launching secure checkout..."
+      : platformFeePaid
+        ? "Payment approved"
+        : paymentCaptured
+          ? "Awaiting admin approval"
+          : paymentRequested
+            ? "Retry $50 platform fee"
+            : "Pay $50 platform fee";
 
   const heroService =
     legalServices.find(
@@ -594,7 +935,21 @@ function ServiceCatalog() {
                 Select a mandate above to continue with the platform fee.
               </p>
             )}
-            {paymentRequested && !platformFeePaid && (
+            {paymentActionMessage && (
+              <p
+                className={clsx(
+                  "text-xs",
+                  paymentActionState === "error"
+                    ? "text-rose-700"
+                    : paymentActionState === "success"
+                      ? "text-emerald-700"
+                      : "text-slate-600"
+                )}
+              >
+                {paymentActionMessage}
+              </p>
+            )}
+            {paymentCaptured && !platformFeePaid && paymentStatus === "pending" && (
               <p className="text-xs text-amber-700">
                 Admin approval is pending. You will be notified once payment is cleared.
               </p>
@@ -613,10 +968,9 @@ function RightColumn() {
   const assignedCaseManager = usePortalStore((state) => state.assignedCaseManager);
   const assignedPractitioner = usePortalStore((state) => state.assignedPractitioner);
   const paymentStatus = usePortalStore((state) => state.paymentStatus);
+  const paymentCaptured = usePortalStore((state) => state.paymentCaptured);
   const platformFeePaid = usePortalStore((state) => state.platformFeePaid);
-  const caseId = usePortalStore((state) => state.caseId);
   const assurance = usePortalStore((state) => state.assurance);
-  const paymentRequested = Boolean(caseId);
 
   return (
     <div className="space-y-4">
@@ -625,7 +979,7 @@ function RightColumn() {
           <UserCheck className="h-5 w-5 text-slate-900" />
           <h3 className="text-lg font-semibold">Assignment desk</h3>
         </div>
-        {!platformFeePaid && paymentRequested && paymentStatus === "pending" ? (
+        {!platformFeePaid && paymentCaptured && paymentStatus === "pending" ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             <p className="font-semibold">Payment approval in progress</p>
             <p className="text-slate-600">
@@ -682,6 +1036,7 @@ function CaseIntake() {
   const setCaseDetailsDraft = usePortalStore((state) => state.setCaseDetailsDraft);
   const submitCaseDetails = usePortalStore((state) => state.submitCaseDetails);
   const paymentStatus = usePortalStore((state) => state.paymentStatus);
+  const paymentCaptured = usePortalStore((state) => state.paymentCaptured);
   const platformFeePaid = usePortalStore((state) => state.platformFeePaid);
   const caseId = usePortalStore((state) => state.caseId);
   const [saving, setSaving] = useState(false);
@@ -731,8 +1086,10 @@ function CaseIntake() {
           <p>
             {platformFeePaid
               ? "Approved. Your case manager can activate assignments."
-              : paymentRequested && paymentStatus === "pending"
+              : paymentCaptured && paymentStatus === "pending"
                 ? "Pending approval. Compliance will confirm shortly."
+                : paymentRequested
+                  ? "Payment is not yet verified. Retry checkout to continue."
                 : "Submit the platform fee once details are ready."}
           </p>
         </div>
@@ -843,6 +1200,104 @@ function CreditCardIcon() {
   return <CreditCard size={16} className="text-emerald-500" />;
 }
 
+function PaymentSchedule() {
+  const bankInstructions = usePortalStore((state) => state.bankInstructions);
+  const paymentPlan = usePortalStore((state) => state.paymentPlan);
+  const terms = usePortalStore((state) => state.terms);
+  const submitPaymentProof = usePortalStore((state) => state.submitPaymentProof);
+  const paymentProofs = usePortalStore((state) => state.paymentProofs ?? []);
+  const [url, setUrl] = useState("");
+  const [note, setNote] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setSending(true);
+    await submitPaymentProof({ url: url || undefined, note: note || undefined });
+    setSending(false);
+    setUrl("");
+    setNote("");
+  };
+
+  return (
+    <section className={clsx(cardShell, "p-6 lg:p-8")}>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+            Payment schedule
+          </p>
+          <h3 className="text-2xl font-semibold">Bank transfer workflow</h3>
+        </div>
+        <CreditCard className="h-5 w-5 text-emerald-500" />
+      </div>
+      {bankInstructions ? (
+        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <p className="font-semibold">Bank instructions</p>
+          <p className="text-slate-700">{bankInstructions}</p>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-slate-500">Awaiting payment instructions from case manager.</p>
+      )}
+      {paymentPlan && (
+        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 whitespace-pre-line">
+          <p className="font-semibold text-slate-900">Schedule</p>
+          {paymentPlan}
+        </div>
+      )}
+      {terms && (
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 whitespace-pre-line">
+          <p className="font-semibold text-slate-900">Terms & conditions</p>
+          {terms}
+        </div>
+      )}
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3 rounded-2xl border border-dashed border-slate-300 p-4 text-sm">
+        <p className="font-semibold text-slate-900">Upload transaction proof</p>
+        <input
+          className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+          placeholder="Proof link (drive/share) or reference number"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <textarea
+          className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm"
+          placeholder="Notes (bank, UTR, amount, date)"
+          rows={3}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+        <button
+          type="submit"
+          disabled={sending || (!url && !note)}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-amber-50 disabled:opacity-40"
+        >
+          {sending ? "Submitting..." : "Submit proof"}
+        </button>
+      </form>
+      {paymentProofs.length > 0 && (
+        <div className="mt-4 space-y-2 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Submitted proofs</p>
+          {paymentProofs.map((p) => (
+            <div key={p.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+              <p className="text-xs text-slate-500">
+                {p.submittedBy} • {new Date(p.submittedAt).toLocaleString()}
+              </p>
+              {p.url && (
+                <p className="text-sm text-blue-600">
+                  <a href={p.url} target="_blank" rel="noreferrer">
+                    {p.url}
+                  </a>
+                </p>
+              )}
+              {p.note && <p className="text-sm text-slate-700">{p.note}</p>}
+              <p className="text-xs text-slate-500">{p.approved ? "Approved" : "Pending review"}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function DocumentVault() {
   const documents = usePortalStore((state) => state.documents);
   const addDocument = usePortalStore((state) => state.addDocument);
@@ -948,13 +1403,16 @@ function VideoScheduler() {
   const videoCall = usePortalStore((state) => state.videoCall);
   const scheduleVideoCall = usePortalStore((state) => state.scheduleVideoCall);
   const platformFeePaid = usePortalStore((state) => state.platformFeePaid);
-  const [slot, setSlot] = useState("2026-01-27 09:00 GMT");
+  const [slot, setSlot] = useState(() => new Date(Date.now() + 15 * 60 * 1000).toISOString());
 
   const slots = useMemo(
-    () => ["2026-01-27 09:00 GMT", "2026-01-27 18:30 IST", "2026-01-28 08:00 EST"],
+    () =>
+      [15, 30, 45].map((minutes) =>
+        new Date(Date.now() + minutes * 60 * 1000).toISOString()
+      ),
     []
   );
-  const joinLink = videoCall?.link ?? "https://meet.nri-law-buddy.com/case/alpha";
+  const joinLink = videoCall?.link ?? "/meeting/demo";
 
   const handleJoinNow = () => {
     if (typeof window !== "undefined") {
@@ -971,7 +1429,7 @@ function VideoScheduler() {
       <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-900 text-amber-50">
           <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em]">
-            <Wifi className="h-4 w-4" /> SecureMeet Live
+            <Wifi className="h-4 w-4" /> Amazon Chime Live
           </div>
           <div className="absolute bottom-4 left-4 flex gap-2 text-xs">
             <span className="rounded-full bg-white/10 px-2 py-1">HD</span>
@@ -997,10 +1455,10 @@ function VideoScheduler() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">
-              {videoCall ? `Confirmed for ${videoCall.scheduledAt}` : "SecureMeet room available"}
+              {videoCall ? `Confirmed for ${videoCall.scheduledAt}` : "Amazon Chime room available"}
             </p>
             <p className="text-xs text-slate-500">
-              HD sessions with recording and encrypted storage. Launching opens the SecureMeet link.
+              HD sessions with recording and encrypted storage. Launching opens the meeting room.
             </p>
           </div>
           <button
@@ -1008,7 +1466,7 @@ function VideoScheduler() {
             onClick={handleJoinNow}
             className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-amber-50"
           >
-            <PhoneCall className="h-4 w-4" /> Launch SecureMeet
+            <PhoneCall className="h-4 w-4" /> Launch Meeting Room
             <ArrowUpRight className="h-4 w-4" />
           </button>
         </div>
@@ -1017,8 +1475,8 @@ function VideoScheduler() {
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
           <p className="font-semibold">Confirmed slot</p>
           <p>{videoCall.scheduledAt}</p>
-          <a href={videoCall.link} className="text-emerald-700 underline" target="_blank">
-            Join SecureMeet
+          <a href={videoCall.link} className="text-emerald-700 underline" target="_blank" rel="noreferrer">
+            Join Meeting Room
           </a>
         </div>
       ) : (
@@ -1032,7 +1490,9 @@ function VideoScheduler() {
               disabled={!platformFeePaid}
             >
               {slots.map((item) => (
-                <option key={item}>{item}</option>
+                <option key={item} value={item}>
+                  {format(new Date(item), "dd MMM yyyy, HH:mm")} UTC
+                </option>
               ))}
             </select>
           </label>
@@ -1042,7 +1502,7 @@ function VideoScheduler() {
             className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-900/20 px-4 py-3 text-sm font-semibold text-slate-900 disabled:opacity-40"
           >
             <CalendarCheck className="h-4 w-4 text-emerald-500" />
-            Schedule SecureMeet
+            Schedule Amazon Chime
           </button>
           {!platformFeePaid && (
             <p className="text-xs text-slate-500">

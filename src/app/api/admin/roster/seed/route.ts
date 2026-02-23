@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/server/db";
+import { checkRole } from "@/server/guards";
+import { authorize } from "@/server/route-auth";
+import { ensureRuntimeSchema } from "@/server/runtime-schema";
 
 const managers = [
   {
@@ -48,6 +51,11 @@ const practitioners = [
 ];
 
 export async function POST() {
+  const auth = await authorize(["admin", "super-admin"]);
+  if (auth.response) return auth.response;
+  const roleGuard = checkRole(auth.session?.effectiveRole?.toUpperCase(), ["ADMIN", "SUPER-ADMIN"]);
+  if (roleGuard) return roleGuard;
+  await ensureRuntimeSchema();
   for (const manager of managers) {
     await prisma.$executeRaw`
       INSERT INTO CaseManager (id, name, timezone, specialization, weeklyLoad)

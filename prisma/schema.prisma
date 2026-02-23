@@ -13,6 +13,9 @@ model User {
   email     String  @unique
   country   String
   passwordHash String
+  role      String  @default("client")
+  isEmailVerified Boolean @default(false)
+  signupFeePaid Boolean @default(false)
   createdAt DateTime @default(now())
   cases     Case[]
 }
@@ -32,6 +35,8 @@ model Case {
   user            User             @relation(fields: [userId], references: [id])
   serviceId       String
   stage           String
+  caseStatus      String           @default("SUBMITTED")
+  stageStatus     String           @default("PENDING")
   platformFeePaid Boolean
   paymentStatus   String           @default("pending")
   caseDetails     String?
@@ -45,6 +50,10 @@ model Case {
   documentCount   Int              @default(0)
   escrowMilestones String
   timeline        String
+  bankInstructions String?
+  paymentPlan     String?
+  paymentProofs   String?
+  terms           String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   documents       VaultDocument[]
@@ -69,4 +78,114 @@ model VideoReservation {
   scheduledAt String
   link        String
   createdAt   DateTime @default(now())
+}
+
+model EmailOtp {
+  id           String   @id
+  email        String
+  fullName     String
+  country      String
+  passwordHash String
+  otpHash      String
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+model PasswordResetOtp {
+  id           String   @id
+  email        String
+  passwordHash String
+  otpHash      String
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
+model Session {
+  id            String   @id
+  tokenHash     String   @unique
+  subjectId     String
+  subjectEmail  String
+  role          String
+  actingAsRole  String?
+  actingAsEmail String?
+  userAgent     String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+
+  @@index([subjectEmail])
+  @@index([expiresAt])
+}
+
+model SupportTicket {
+  id          String   @id
+  caseId      String?
+  email       String
+  title       String
+  description String
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@index([email])
+  @@index([status])
+  @@index([caseId])
+}
+
+model Meeting {
+  id             String   @id
+  caseId         String
+  scheduledAt    String
+  link           String
+  provider       String
+  createdByEmail String
+  createdAt      DateTime @default(now())
+
+  @@index([caseId])
+}
+
+model AuditLog {
+  id         String   @id
+  actorEmail String
+  actorRole  String
+  action     String
+  targetType String
+  targetId   String
+  details    String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorEmail])
+}
+
+model AuthRateLimit {
+  id          String   @id
+  bucket      String
+  subjectHash String
+  attempts    Int      @default(0)
+  windowStart DateTime
+  blockedUntil DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@index([bucket])
+}
+
+model Blog {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  excerpt     String?
+  content     String
+  authorEmail String
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

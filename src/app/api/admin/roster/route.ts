@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 
 import prisma from "@/server/db";
+import { checkRole } from "@/server/guards";
+import { authorize } from "@/server/route-auth";
+import { ensureRuntimeSchema } from "@/server/runtime-schema";
 
 export async function GET() {
+  const auth = await authorize(["admin", "super-admin"]);
+  if (auth.response) return auth.response;
+  const roleGuard = checkRole(auth.session?.effectiveRole?.toUpperCase(), ["ADMIN", "SUPER-ADMIN"]);
+  if (roleGuard) return roleGuard;
+  await ensureRuntimeSchema();
   const managers = await prisma.$queryRaw<
     Array<{ id: string; name: string; timezone: string; specialization: string; weeklyLoad: number }>
   >`
@@ -23,6 +31,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const auth = await authorize(["admin", "super-admin"]);
+  if (auth.response) return auth.response;
+  const roleGuard = checkRole(auth.session?.effectiveRole?.toUpperCase(), ["ADMIN", "SUPER-ADMIN"]);
+  if (roleGuard) return roleGuard;
+  await ensureRuntimeSchema();
   const body = (await req.json()) as {
     managers?: Array<{ id: string; name: string; timezone: string; specialization: string; weeklyLoad: number }>;
     practitioners?: Array<{ id: string; name: string; bar: string; focus: string }>;
