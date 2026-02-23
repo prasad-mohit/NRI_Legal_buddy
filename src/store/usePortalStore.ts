@@ -1030,4 +1030,5 @@ export const usePortalStore = create<PortalState>((set, get) => {
       })),
     });
   },
+};
 });
