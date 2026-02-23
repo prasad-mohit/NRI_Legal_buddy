@@ -19,7 +19,11 @@ export async function POST(req: Request) {
 
   const state = await checkCaseState(body.caseId, ["PAYMENT_PENDING"]);
   if (state.response) return state.response;
-  const stageState = await checkStageState(body.caseId, ["PAYMENT_SUBMITTED", "AWAITING_PAYMENT", "PAYMENT_PENDING", "PAID"]);
+  const stageState = await checkStageState(body.caseId, [
+    "AWAITING_PAYMENT",
+    "PAYMENT_SUBMITTED",
+    "PAID",
+  ]);
   if (stageState.response) return stageState.response;
   const current = state.record ?? stageState.record;
   const currentCaseStatus = normalizeCaseStatus(current?.caseStatus as any);
