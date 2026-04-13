@@ -68,6 +68,8 @@ model VaultDocument {
   type       String
   status     String
   summary    String
+  accessList String?  // comma-separated: "${userId},${caseManagerId},${practitionerId}"
+  isRecording Boolean @default(false)
   uploadedAt DateTime @default(now())
 }
 
@@ -146,6 +148,8 @@ model Meeting {
   link           String
   provider       String
   createdByEmail String
+  recordingUrl   String?  // optional vault document id after recording is uploaded
+  accessList     String?  // comma-separated: "${userId},${caseManagerId},${practitionerId}"
   createdAt      DateTime @default(now())
 
   @@index([caseId])

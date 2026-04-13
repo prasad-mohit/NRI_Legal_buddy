@@ -5,6 +5,7 @@ import { checkCaseState, checkStageState } from "@/server/guards";
 import { logAction } from "@/server/audit-log";
 import { advanceEscrow, addDocument, logTimelineEntry, recordVideo, updateCase } from "@/server/storage";
 import { authorize } from "@/server/route-auth";
+import prisma from "@/server/db";
 import type { CaseStage } from "@/server/types";
 
 const summarizeCase = (details: string) => {
@@ -32,6 +33,7 @@ export async function GET(_: Request, { params }: { params: { caseId: string } }
     "UNDER_REVIEW",
     "AWAITING_CLIENT_APPROVAL",
     "PAYMENT_PENDING",
+    "AWAITING_ASSIGNMENT",
     "IN_PROGRESS",
     "CLOSED",
   ]);
@@ -91,6 +93,7 @@ export async function PATCH(req: Request, { params }: { params: { caseId: string
     "UNDER_REVIEW",
     "AWAITING_CLIENT_APPROVAL",
     "PAYMENT_PENDING",
+    "AWAITING_ASSIGNMENT",
     "IN_PROGRESS",
     "CLOSED",
   ]);
@@ -110,7 +113,9 @@ export async function PATCH(req: Request, { params }: { params: { caseId: string
     record = stageState.record ?? record;
   }
 
-  const executionRequested = Boolean(body.document || body.videoSlot || body.escrowAdvance);
+  // Documents can be uploaded from SUBMITTED/PAYMENT_PENDING (pre-case docs) or IN_PROGRESS
+  // Video/escrow require IN_PROGRESS
+  const executionRequested = Boolean(body.videoSlot || body.escrowAdvance);
   if (executionRequested) {
     const progressGuard = await checkCaseState(params.caseId, ["IN_PROGRESS"]);
     if (progressGuard.response) return progressGuard.response;
@@ -127,7 +132,10 @@ export async function PATCH(req: Request, { params }: { params: { caseId: string
   }
 
   if (body.document) {
-    await addDocument(params.caseId, body.document);
+    // Build accessList: userId + caseManagerId + practitionerId
+    const caseRaw = await prisma.case.findUnique({ where: { id: params.caseId }, select: { userId: true, caseManagerId: true, practitionerId: true } });
+    const accessParts = [caseRaw?.userId, caseRaw?.caseManagerId, caseRaw?.practitionerId].filter(Boolean);
+    await addDocument(params.caseId, body.document, { accessList: accessParts.join(",") });
     await logAction({
       caseId: params.caseId,
       action: "document.uploaded",

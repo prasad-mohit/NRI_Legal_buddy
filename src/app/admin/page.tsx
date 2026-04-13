@@ -44,6 +44,7 @@ interface CaseRow {
   documentCount: number; videoSlot: string | null; updatedAt: string;
   fullName: string; email: string; country: string;
   bankInstructions?: string | null; paymentPlan?: string | null; terms?: string | null;
+  paymentProofs?: string | null;  // JSON string of proof submissions
 }
 interface CaseManagerRow { id: string; name: string; timezone: string; specialization: string; weeklyLoad: number }
 interface PractitionerRow { id: string; name: string; bar: string; focus: string }
@@ -52,7 +53,7 @@ interface DocumentRow { id: string; caseId: string; name: string; type: string; 
 interface VideoRow { id: string; caseId: string; scheduledAt: string; link: string; createdAt: string }
 interface BlogRow { id: string; slug: string; title: string; excerpt?: string | null; content: string; authorEmail: string; published: boolean; createdAt: string }
 interface SessionRow { id: string; subjectEmail: string; role: string; actingAsEmail?: string | null; actingAsRole?: string | null; expiresAt: string; revokedAt: string | null; createdAt: string }
-type CaseTab = "SUBMITTED" | "UNDER_REVIEW" | "AWAITING_CLIENT_APPROVAL" | "PAYMENT_PENDING" | "IN_PROGRESS";
+type CaseTab = "SUBMITTED" | "PAYMENT_PENDING" | "AWAITING_ASSIGNMENT" | "IN_PROGRESS" | "CLOSED";
 type AdminTab = "dashboard" | "cases" | "clients" | "roster" | "sessions" | "users" | "blogs" | "docs" | "videos";
 
 // ── Root ─────────────────────────────────────────────────────────────────────
@@ -353,7 +354,7 @@ export default function AdminConsole() {
           {tab === "cases" && (
             <div className="max-w-5xl space-y-4">
               <div className="flex flex-wrap gap-2">
-                {(["SUBMITTED", "UNDER_REVIEW", "AWAITING_CLIENT_APPROVAL", "PAYMENT_PENDING", "IN_PROGRESS"] as CaseTab[]).map((t) => (
+                {(["SUBMITTED", "PAYMENT_PENDING", "AWAITING_ASSIGNMENT", "IN_PROGRESS", "CLOSED"] as CaseTab[]).map((t) => (
                   <button key={t} type="button" onClick={() => setCaseTab(t)}
                     className={clsx("rounded-full px-4 py-1.5 text-xs font-semibold transition",
                       caseTab === t ? "bg-indigo-600 text-white" : "border border-slate-200 text-slate-600 hover:border-indigo-400")}>
@@ -366,34 +367,83 @@ export default function AdminConsole() {
                 const mgMeta = parseMeta<CaseManagerRow>(row.caseManagerMeta);
                 const prMeta = parseMeta<PractitionerRow>(row.practitionerMeta);
                 const draft = assignmentDrafts[row.id] ?? {};
+                const paymentApproved = row.paymentStatus === "approved";
+                const canAssign = paymentApproved;
+
+                // Parse payment proofs
+                let proofs: Array<{ id: string; submittedBy: string; submittedAt: string; url?: string; note?: string; approved?: boolean }> = [];
+                try { proofs = row.paymentProofs ? JSON.parse(row.paymentProofs) as typeof proofs : []; } catch { proofs = []; }
+
                 return (
                   <div key={row.id} className={clsx(card, "p-6 space-y-4")}>
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                       <div>
                         <p className="font-bold text-slate-900">{row.fullName}</p>
                         <p className="text-sm text-slate-500">{row.email} · {row.country}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Service: {row.serviceId} · Docs: {row.documentCount}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Service: {row.serviceId} · Docs: {row.documentCount} · Stage: {row.stage}</p>
                       </div>
                       <div className="flex flex-wrap gap-2 text-xs">
                         <span className={clsx("rounded-full px-3 py-1 font-semibold",
-                          row.paymentStatus === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
-                          {row.paymentStatus}
+                          paymentApproved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                          Payment: {row.paymentStatus}
                         </span>
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+                        <span className={clsx("rounded-full px-3 py-1 text-slate-600",
+                          (row.caseStatus ?? "") === "AWAITING_ASSIGNMENT" ? "bg-blue-100 text-blue-700 font-semibold" : "bg-slate-100")}>
                           {(row.caseStatus ?? "SUBMITTED").replace(/_/g, " ")}
                         </span>
                       </div>
                     </div>
                     {row.caseSummary && <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{row.caseSummary}</p>}
+                    {row.caseDetails && <details className="text-xs text-slate-500"><summary className="cursor-pointer font-medium">Case brief</summary><p className="mt-1 whitespace-pre-line">{row.caseDetails}</p></details>}
 
-                    {/* Payment plan */}
+                    {/* Payment proofs section — key admin task */}
+                    {proofs.length > 0 && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                        <p className="text-sm font-semibold text-amber-900">Payment proofs submitted by client ({proofs.length})</p>
+                        {proofs.map((p) => (
+                          <div key={p.id} className="rounded-lg bg-white border border-amber-100 p-3 text-sm">
+                            <p className="text-xs text-slate-400">{p.submittedBy} · {new Date(p.submittedAt).toLocaleString()}</p>
+                            {p.url && <p className="text-indigo-700 mt-1 break-all font-medium">{p.url}</p>}
+                            {p.note && <p className="text-slate-700 mt-1">{p.note}</p>}
+                            <span className={clsx("mt-1 inline-flex rounded-full px-2 py-0.5 text-xs",
+                              p.approved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                              {p.approved ? "Approved" : "Pending verification"}
+                            </span>
+                          </div>
+                        ))}
+                        {!paymentApproved && (
+                          <button type="button" onClick={() => void handleApprovePayment(row.id)}
+                            className={clsx(btnPrimary, "bg-emerald-600 hover:bg-emerald-700 w-full mt-2")}>
+                            <CheckCircle2 className="h-4 w-4" /> Verify & approve payment → unlock assignment
+                          </button>
+                        )}
+                        {paymentApproved && (
+                          <p className="text-xs text-emerald-700 font-semibold">✓ Payment verified. You can now assign the legal team below.</p>
+                        )}
+                      </div>
+                    )}
+                    {proofs.length === 0 && !paymentApproved && (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                        No payment proof submitted yet. Client hasn&apos;t sent bank transfer details.
+                        {row.paymentStatus !== "approved" && (
+                          <button type="button" onClick={() => void handleApprovePayment(row.id)}
+                            className={clsx("ml-3", btnSmall, "text-emerald-700 border-emerald-300 hover:border-emerald-500")}>
+                            Force approve
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bank instructions admin can set for client */}
                     <details className="rounded-xl border border-slate-200">
-                      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 rounded-xl">Payment instructions</summary>
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 rounded-xl">
+                        Set bank & payment instructions for client
+                      </summary>
                       <div className="px-4 pb-4 pt-2 space-y-2">
                         {[
-                          { key: "bankInstructions", label: "Bank instructions", placeholder: "IFSC, account no., bank name", rows: 2 },
-                          { key: "paymentPlan", label: "Payment plan", placeholder: "Schedule / milestones", rows: 2 },
-                          { key: "terms", label: "Terms & conditions", placeholder: "Platform terms for this case", rows: 2 },
+                          { key: "bankInstructions", label: "Bank transfer instructions (shown to client)", placeholder: "Account: 1234567890\nIFSC: HDFC0001234\nName: NRI Law Buddy Escrow", rows: 3 },
+                          { key: "paymentPlan", label: "Payment schedule", placeholder: "$50 platform fee due now. Balance on case filing.", rows: 2 },
+                          { key: "terms", label: "Terms & conditions", placeholder: "All funds processed via platform.", rows: 2 },
                         ].map((f) => (
                           <label key={f.key} className="block text-xs font-medium text-slate-600">
                             {f.label}
@@ -404,43 +454,46 @@ export default function AdminConsole() {
                           </label>
                         ))}
                         <button type="button" onClick={() => void handleSavePaymentPlan(row)} className={btnSmall}>
-                          Save payment plan
+                          Save & publish to client
                         </button>
                       </div>
                     </details>
 
-                    {/* Assignments */}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Case manager
-                        <select value={draft.managerId ?? mgMeta?.id ?? ""}
-                          onChange={(e) => setAssignmentDrafts((p) => ({ ...p, [row.id]: { ...p[row.id], managerId: e.target.value } }))}
-                          className={clsx("mt-1", inputCls)}>
-                          <option value="">Select manager</option>
-                          {managers.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.specialization}</option>)}
-                        </select>
-                      </label>
-                      <label className="block text-xs font-medium text-slate-600">
-                        Practitioner
-                        <select value={draft.practitionerId ?? prMeta?.id ?? ""}
-                          onChange={(e) => setAssignmentDrafts((p) => ({ ...p, [row.id]: { ...p[row.id], practitionerId: e.target.value } }))}
-                          className={clsx("mt-1", inputCls)}>
-                          <option value="">Select practitioner</option>
-                          {practitioners.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.focus}</option>)}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button type="button" onClick={() => void handleAssignment(row)} className={btnPrimary}>
-                        <ClipboardCheck className="h-4 w-4" /> Save assignment
-                      </button>
-                      {row.paymentStatus !== "approved" && (
-                        <button type="button" onClick={() => void handleApprovePayment(row.id)}
-                          className={clsx(btnOutline, "border-emerald-400 text-emerald-700 hover:border-emerald-600")}>
-                          <CheckCircle2 className="h-4 w-4" /> Approve payment
+                    {/* Assignments — only unlocked after payment approved */}
+                    {canAssign ? (
+                      <>
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-2 text-xs text-indigo-800 font-medium">
+                          ✓ Payment approved — assign the legal team to activate all client features
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block text-xs font-medium text-slate-600">
+                            Case manager
+                            <select value={draft.managerId ?? mgMeta?.id ?? ""}
+                              onChange={(e) => setAssignmentDrafts((p) => ({ ...p, [row.id]: { ...p[row.id], managerId: e.target.value } }))}
+                              className={clsx("mt-1", inputCls)}>
+                              <option value="">Select manager</option>
+                              {managers.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.specialization}</option>)}
+                            </select>
+                          </label>
+                          <label className="block text-xs font-medium text-slate-600">
+                            Lawyer / practitioner
+                            <select value={draft.practitionerId ?? prMeta?.id ?? ""}
+                              onChange={(e) => setAssignmentDrafts((p) => ({ ...p, [row.id]: { ...p[row.id], practitionerId: e.target.value } }))}
+                              className={clsx("mt-1", inputCls)}>
+                              <option value="">Select practitioner</option>
+                              {practitioners.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.focus}</option>)}
+                            </select>
+                          </label>
+                        </div>
+                        <button type="button" onClick={() => void handleAssignment(row)} className={btnPrimary}>
+                          <ClipboardCheck className="h-4 w-4" /> Assign legal team → activate client
                         </button>
-                      )}
-                    </div>
+                      </>
+                    ) : (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+                        Verify &amp; approve payment above to unlock assignment.
+                      </div>
+                    )}
                   </div>
                 );
               })}

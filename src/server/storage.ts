@@ -27,13 +27,11 @@ export const ensureCaseSchema = async () => {
   const migrations: Array<{ name: string; sql: string }> = [
     {
       name: "caseStatus",
-      sql: `ALTER TABLE "Case" ADD COLUMN caseStatus TEXT NOT NULL DEFAULT 'SUBMITTED'
-            CHECK (caseStatus IN ('SUBMITTED','UNDER_REVIEW','AWAITING_CLIENT_APPROVAL','PAYMENT_PENDING','IN_PROGRESS','CLOSED'))`,
+      sql: `ALTER TABLE "Case" ADD COLUMN caseStatus TEXT NOT NULL DEFAULT 'SUBMITTED'`,
     },
     {
       name: "stageStatus",
-      sql: `ALTER TABLE "Case" ADD COLUMN stageStatus TEXT NOT NULL DEFAULT 'PENDING'
-            CHECK (stageStatus IN ('PENDING','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAID','IN_PROGRESS','COMPLETE'))`,
+      sql: `ALTER TABLE "Case" ADD COLUMN stageStatus TEXT NOT NULL DEFAULT 'PENDING'`,
     },
     {
       name: "paymentStatus",
@@ -48,6 +46,37 @@ export const ensureCaseSchema = async () => {
     { name: "paymentProofs", sql: "ALTER TABLE \"Case\" ADD COLUMN paymentProofs TEXT" },
     { name: "terms", sql: "ALTER TABLE \"Case\" ADD COLUMN terms TEXT" },
   ];
+
+  // VaultDocument migrations
+  const vaultColumns = (await prisma.$queryRaw<{ name: string }[]>`
+    PRAGMA table_info('VaultDocument')
+  `) as Array<{ name: string }>;
+  const vaultNames = new Set(vaultColumns.map((c: { name: string }) => c.name));
+  const vaultMigrations: Array<{ name: string; sql: string }> = [
+    { name: "accessList", sql: "ALTER TABLE \"VaultDocument\" ADD COLUMN accessList TEXT" },
+    { name: "isRecording", sql: "ALTER TABLE \"VaultDocument\" ADD COLUMN isRecording INTEGER NOT NULL DEFAULT 0" },
+  ];
+  for (const migration of vaultMigrations) {
+    if (!vaultNames.has(migration.name)) {
+      await prisma.$executeRawUnsafe(migration.sql);
+    }
+  }
+
+  // Meeting migrations
+  let meetingColumns: Array<{ name: string }> = [];
+  try {
+    meetingColumns = (await prisma.$queryRaw<{ name: string }[]>`PRAGMA table_info('Meeting')`) as Array<{ name: string }>;
+  } catch { /* table may not exist yet */ }
+  const meetingNames = new Set(meetingColumns.map((c: { name: string }) => c.name));
+  const meetingMigrations: Array<{ name: string; sql: string }> = [
+    { name: "recordingUrl", sql: "ALTER TABLE \"Meeting\" ADD COLUMN recordingUrl TEXT" },
+    { name: "accessList", sql: "ALTER TABLE \"Meeting\" ADD COLUMN accessList TEXT" },
+  ];
+  for (const migration of meetingMigrations) {
+    if (meetingNames.size > 0 && !meetingNames.has(migration.name)) {
+      await prisma.$executeRawUnsafe(migration.sql);
+    }
+  }
 
   for (const migration of migrations) {
     if (!names.has(migration.name)) {
@@ -388,7 +417,8 @@ export async function recordVideo(caseId: string, scheduledAt: string): Promise<
 
 export async function addDocument(
   caseId: string,
-  doc: Omit<VaultDocument, "id" | "caseId" | "uploadedAt">
+  doc: Omit<VaultDocument, "id" | "caseId" | "uploadedAt">,
+  extra?: { accessList?: string; isRecording?: boolean }
 ) {
   const record = await prisma.vaultDocument.create({
     data: {
@@ -397,17 +427,17 @@ export async function addDocument(
       type: doc.type,
       status: doc.status,
       summary: doc.summary,
-    },
+      ...(extra?.accessList ? { accessList: extra.accessList } : {}),
+      ...(extra?.isRecording ? { isRecording: extra.isRecording } : {}),
+    } as any,
   });
 
+  // only increment documentCount; do NOT overwrite current case stage
   const caseRecord = await prisma.case.findUnique({ where: { id: caseId } });
   if (caseRecord) {
     await prisma.case.update({
       where: { id: caseId },
-      data: {
-        documentCount: caseRecord.documentCount + 1,
-        stage: "documents",
-      },
+      data: { documentCount: caseRecord.documentCount + 1 },
     });
   }
 

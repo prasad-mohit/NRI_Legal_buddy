@@ -396,13 +396,15 @@ function PortalShell() {
   const user = usePortalStore((s) => s.user);
   const stage = usePortalStore((s) => s.stage);
   const caseStatus = usePortalStore((s) => s.caseStatus);
-  const platformFeePaid = usePortalStore((s) => s.platformFeePaid);
+  const assignedPractitioner = usePortalStore((s) => s.assignedPractitioner);
   const logoutUser = usePortalStore((s) => s.logoutUser);
   const caseId = usePortalStore((s) => s.caseId);
   const refreshCaseStatus = usePortalStore((s) => s.refreshCaseStatus);
   const syncCases = usePortalStore((s) => s.syncCases);
   const [section, setSection] = useState<PortalSection>("dashboard");
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Features unlock only after lawyer is assigned
+  const lawyerActivated = Boolean(assignedPractitioner);
 
   useEffect(() => {
     if (caseId) void refreshCaseStatus();
@@ -413,9 +415,9 @@ function PortalShell() {
     { id: "dashboard", label: "Dashboard", icon: <BadgeCheck className="h-4 w-4" /> },
     { id: "services", label: "Services", icon: <Gavel className="h-4 w-4" /> },
     { id: "case", label: "My Case", icon: <MessageSquare className="h-4 w-4" /> },
-    { id: "documents", label: "Documents", icon: <FileText className="h-4 w-4" />, locked: !platformFeePaid },
-    { id: "meetings", label: "Meetings", icon: <Video className="h-4 w-4" />, locked: !platformFeePaid },
-    { id: "escrow", label: "Escrow", icon: <FolderLock className="h-4 w-4" />, locked: !platformFeePaid },
+    { id: "documents", label: "Documents", icon: <FileText className="h-4 w-4" />, locked: !lawyerActivated },
+    { id: "meetings", label: "Meetings", icon: <Video className="h-4 w-4" />, locked: !lawyerActivated },
+    { id: "escrow", label: "Escrow", icon: <FolderLock className="h-4 w-4" />, locked: !lawyerActivated },
   ];
 
   return (
@@ -495,9 +497,9 @@ function PortalShell() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {platformFeePaid && (
+            {lawyerActivated && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Fee approved
+                <CheckCircle2 className="h-3.5 w-3.5" /> Legal team assigned
               </span>
             )}
           </div>
@@ -534,18 +536,21 @@ function DashboardView({ onNavigate }: { onNavigate: (s: PortalSection) => void 
   const assurance = usePortalStore((s) => s.assurance);
 
   const steps = [
-    { id: "services", label: "Select legal service", done: Boolean(selectedService), icon: <Gavel className="h-4 w-4" /> },
-    { id: "services", label: "Platform fee paid", done: platformFeePaid || paymentCaptured, icon: <CreditCard className="h-4 w-4" /> },
-    { id: "case", label: "Case manager assigned", done: Boolean(assignedCaseManager), icon: <UserCheck className="h-4 w-4" /> },
-    { id: "case", label: "Practitioner assigned", done: Boolean(assignedPractitioner), icon: <Scale className="h-4 w-4" /> },
-    { id: "meetings", label: "Video consult scheduled", done: Boolean(videoCall), icon: <Video className="h-4 w-4" /> },
+    { id: "services", label: "Select legal service & brief your case", done: Boolean(selectedService && caseId), icon: <Gavel className="h-4 w-4" /> },
+    { id: "case", label: "Submit $50 payment proof to admin", done: paymentCaptured || platformFeePaid, icon: <CreditCard className="h-4 w-4" /> },
+    { id: "case", label: "Admin verifies payment", done: platformFeePaid, icon: <ShieldCheck className="h-4 w-4" /> },
+    { id: "case", label: "Case manager & lawyer assigned", done: Boolean(assignedCaseManager && assignedPractitioner), icon: <UserCheck className="h-4 w-4" /> },
+    { id: "meetings", label: "Video consultation scheduled", done: Boolean(videoCall), icon: <Video className="h-4 w-4" /> },
   ] as const;
 
-  const paymentBanner = paymentCaptured && !platformFeePaid
-    ? { type: "warning", text: "Payment captured — awaiting admin approval." }
-    : !paymentCaptured && !platformFeePaid && selectedService
-      ? { type: "info", text: "Complete the $50 platform fee to unlock your case." }
-      : null;
+  const paymentBanner =
+    platformFeePaid && !assignedPractitioner
+      ? { type: "info" as const, text: "Payment approved. Awaiting lawyer & case manager assignment by admin." }
+      : paymentCaptured && !platformFeePaid
+        ? { type: "warning" as const, text: "Payment proof submitted — awaiting admin verification." }
+        : !paymentCaptured && !platformFeePaid && selectedService && caseId
+          ? { type: "action" as const, text: "Case submitted. Go to My Case to submit your $50 payment proof." }
+          : null;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -575,7 +580,9 @@ function DashboardView({ onNavigate }: { onNavigate: (s: PortalSection) => void 
           "rounded-2xl px-4 py-3 text-sm font-medium flex items-center gap-2",
           paymentBanner.type === "warning"
             ? "bg-amber-50 text-amber-800 border border-amber-200"
-            : "bg-blue-50 text-blue-800 border border-blue-200"
+            : paymentBanner.type === "action"
+              ? "bg-indigo-50 text-indigo-800 border border-indigo-200"
+              : "bg-blue-50 text-blue-800 border border-blue-200"
         )}>
           {paymentBanner.type === "warning" ? <HandCoins className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
           {paymentBanner.text}
@@ -670,7 +677,7 @@ function DashboardView({ onNavigate }: { onNavigate: (s: PortalSection) => void 
 }
 
 // ---------------------------------------------------------------------------
-// Service catalog
+// Service catalog — step 1: pick service + brief + docs, then submit for payment
 // ---------------------------------------------------------------------------
 function ServiceCatalog() {
   const selectedService = usePortalStore((s) => s.selectedService);
@@ -683,45 +690,87 @@ function ServiceCatalog() {
   const capturePlatformFee = usePortalStore((s) => s.capturePlatformFee);
   const setCaseDetailsDraft = usePortalStore((s) => s.setCaseDetailsDraft);
   const submitCaseDetails = usePortalStore((s) => s.submitCaseDetails);
+  const addDocument = usePortalStore((s) => s.addDocument);
   const caseDetails = usePortalStore((s) => s.caseDetails ?? "");
+  const documents = usePortalStore((s) => s.documents);
   const [saving, setSaving] = useState(false);
+  const [docName, setDocName] = useState("");
+  const [docType, setDocType] = useState("Identity");
+  const [docFile, setDocFile] = useState<string | null>(null);
+  const [step, setStep] = useState<1 | 2 | 3>(1); // 1=service, 2=brief+docs, 3=submitted
 
-  const feeDisabled = !selectedService || platformFeePaid || paymentActionState === "loading";
-  const feeLabel =
-    paymentActionState === "loading" ? "Opening checkout…" :
-    platformFeePaid ? "Fee approved ✓" :
-    paymentCaptured ? "Awaiting admin approval" :
-    caseId ? "Retry $50 fee" : "Pay $50 platform fee";
+  // Move to submitted step if case already exists
+  const isSubmitted = Boolean(caseId);
 
   const handleDetails = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     await submitCaseDetails(caseDetails); setSaving(false);
   };
 
+  const handleAddDoc = (e: React.FormEvent) => {
+    e.preventDefault();
+    void addDocument(docName, docType, docFile ?? undefined);
+    setDocName(""); setDocFile(null);
+  };
+
+  const handleSubmitCase = async () => {
+    if (!selectedService || !caseDetails.trim()) return;
+    await capturePlatformFee();
+    setStep(3);
+  };
+
   return (
     <div className="max-w-5xl space-y-6">
+      {/* Step indicator */}
+      <div className="flex items-center gap-3">
+        {[["1", "Select service"], ["2", "Case brief & docs"], ["3", "Complete payment"]].map(([n, label], idx) => {
+          const active = step === idx + 1 || (idx + 1 === 3 && isSubmitted);
+          const done = (idx + 1 < step) || (idx + 1 === 1 && Boolean(selectedService)) || (idx + 1 === 2 && caseDetails.trim().length > 0) || (idx + 1 === 3 && isSubmitted);
+          return (
+            <div key={n} className="flex items-center gap-2">
+              <div className={clsx("flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
+                done ? "bg-indigo-600 text-white" : active ? "bg-indigo-100 text-indigo-700 ring-2 ring-indigo-400" : "bg-slate-100 text-slate-400")}>
+                {done && idx + 1 < step ? "✓" : n}
+              </div>
+              <span className={clsx("text-sm font-medium hidden sm:block", active ? "text-slate-900" : "text-slate-400")}>{label}</span>
+              {idx < 2 && <ChevronRight className="h-4 w-4 text-slate-300" />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Step 3: Case submitted — redirect to payment */}
+      {isSubmitted && (
+        <div className={clsx(card, "p-6 border-emerald-100 bg-emerald-50")}>
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="h-6 w-6 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-emerald-900">Case registered successfully!</p>
+              <p className="text-sm text-emerald-700 mt-1">
+                Your case has been submitted. Now complete the <strong>$50 platform fee</strong> via bank transfer.
+                Admin will verify your payment and assign your legal team — at which point all features unlock.
+              </p>
+              <p className="text-xs text-emerald-600 mt-2">👉 Go to <strong>My Case</strong> tab to submit your payment proof.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 1: Service selector */}
       <div className={clsx(card, "p-6")}>
         <div className="flex items-center gap-2 mb-1">
           <Gavel className="h-5 w-5 text-indigo-600" />
           <h2 className="text-xl font-bold text-slate-900">Select your legal service</h2>
         </div>
-        <p className="text-sm text-slate-500 mb-6">Choose the mandate that matches your situation. You can change it before paying.</p>
+        <p className="text-sm text-slate-500 mb-6">Choose the mandate that matches your situation.</p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {legalServices.map((svc) => {
             const Icon = serviceIconMap[svc.id];
             const active = selectedService?.id === svc.id;
             return (
-              <button
-                key={svc.id}
-                type="button"
-                onClick={() => selectService(svc.id)}
-                className={clsx(
-                  "rounded-2xl border p-4 text-left transition hover:shadow-md",
-                  active
-                    ? "border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-200"
-                    : "border-slate-200 bg-white hover:border-indigo-300"
-                )}
-              >
+              <button key={svc.id} type="button" onClick={() => { selectService(svc.id); setStep(1); }}
+                className={clsx("rounded-2xl border p-4 text-left transition hover:shadow-md",
+                  active ? "border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-200" : "border-slate-200 bg-white hover:border-indigo-300")}>
                 <div className={clsx("mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl",
                   active ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600")}>
                   <Icon className="h-4.5 w-4.5" />
@@ -736,75 +785,94 @@ function ServiceCatalog() {
       </div>
 
       {selectedService && (
-        <div className={clsx(card, "p-6 border-indigo-100")}>
-          <h3 className="font-semibold text-slate-900 mb-1">{selectedService.label}</h3>
-          <p className="text-sm text-slate-500 mb-3">{selectedService.complianceNote}</p>
-          <ul className="grid gap-2 sm:grid-cols-2 mb-4">
-            {selectedService.highlights.map((h) => (
-              <li key={h} className="flex gap-2 text-sm text-slate-700">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-500" /> {h}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Case brief */}
-      <div className={clsx(card, "p-6")}>
-        <div className="flex items-center gap-2 mb-4">
-          <PenSquare className="h-5 w-5 text-indigo-600" />
-          <h3 className="font-semibold text-slate-900">Brief your case</h3>
-        </div>
-        <form onSubmit={handleDetails} className="space-y-3">
-          <textarea
-            rows={4}
-            value={caseDetails}
-            onChange={(e) => setCaseDetailsDraft(e.target.value)}
-            placeholder="Describe your situation: property address, key dates, current disputes…"
-            className={inputCls}
-          />
-          <button type="submit" disabled={saving || !caseDetails.trim()} className={btnPrimary}>
-            {saving ? "Saving…" : "Save brief"}
-          </button>
-        </form>
-      </div>
-
-      {/* Fee payment */}
-      <div className={clsx(card, "p-6")}>
-        <div className="flex items-center gap-2 mb-2">
-          <CreditCard className="h-5 w-5 text-indigo-600" />
-          <h3 className="font-semibold text-slate-900">Platform fee — $50</h3>
-        </div>
-        <p className="text-sm text-slate-500 mb-4">
-          One-time flat fee to activate your case manager, escrow ledger, and document vault.
-          Handled securely via Razorpay — no fee negotiation outside the platform.
-        </p>
-        {paymentActionMessage && (
-          <div className={clsx("mb-3 rounded-xl px-4 py-3 text-sm",
-            paymentActionState === "error"
-              ? "bg-rose-50 text-rose-700 border border-rose-200"
-              : paymentActionState === "success"
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                : "bg-blue-50 text-blue-700 border border-blue-200"
-          )}>
-            {paymentActionMessage}
+        <>
+          {/* Step 2a: Case brief */}
+          <div className={clsx(card, "p-6")}>
+            <div className="flex items-center gap-2 mb-4">
+              <PenSquare className="h-5 w-5 text-indigo-600" />
+              <h3 className="font-semibold text-slate-900">Describe your case</h3>
+            </div>
+            <form onSubmit={handleDetails} className="space-y-3">
+              <textarea rows={5} value={caseDetails} onChange={(e) => setCaseDetailsDraft(e.target.value)}
+                placeholder="Describe your situation: property address, key dates, current disputes, relevant parties…"
+                className={inputCls} />
+              <button type="submit" disabled={saving || !caseDetails.trim()} className={btnPrimary}>
+                {saving ? "Saving…" : "Save brief"}
+              </button>
+            </form>
           </div>
-        )}
-        <button
-          type="button"
-          disabled={feeDisabled}
-          onClick={() => void capturePlatformFee()}
-          className={clsx(btnPrimary, "disabled:opacity-40")}
-        >
-          <HandCoins className="h-4 w-4" /> {feeLabel}
-        </button>
-        {!platformFeePaid && (
-          <p className="mt-3 text-xs text-slate-400">
-            <Shield className="inline h-3.5 w-3.5 mr-1" />
-            All billing is platform-controlled. Never share any fees outside NRI Law Buddy.
-          </p>
-        )}
-      </div>
+
+          {/* Step 2b: Supporting documents (optional pre-case upload) */}
+          <div className={clsx(card, "p-6")}>
+            <div className="flex items-center gap-2 mb-4">
+              <FileUp className="h-5 w-5 text-indigo-600" />
+              <h3 className="font-semibold text-slate-900">Upload supporting documents</h3>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">Optional</span>
+            </div>
+            <p className="text-sm text-slate-500 mb-4">
+              Attach passports, title deeds, POAs or any relevant documents before submitting. You can add more after the call too.
+            </p>
+            {/* Existing docs */}
+            {documents.filter((d) => !d.id.startsWith("doc-passport") && !d.id.startsWith("doc-poa")).length > 0 && (
+              <div className="mb-4 space-y-2">
+                {documents.filter((d) => !d.id.startsWith("doc-passport") && !d.id.startsWith("doc-poa")).map((d) => (
+                  <div key={d.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm">
+                    <FileText className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                    <span className="flex-1 font-medium text-slate-800">{d.name}</span>
+                    <span className="text-xs text-slate-400">{d.type}</span>
+                    <span className={clsx("rounded-full px-2 py-0.5 text-xs",
+                      d.status === "ready" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                      {d.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleAddDoc} className="flex flex-wrap gap-2 items-end">
+              <div className="flex-1 min-w-40">
+                <input value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="Document name" className={clsx(inputCls, "text-sm")} />
+              </div>
+              <div>
+                <select value={docType} onChange={(e) => setDocType(e.target.value)} className={clsx(inputCls, "text-sm")}>
+                  {["Identity", "Authority", "Litigation", "Compliance", "Financial", "Other"].map((t) => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <input type="file" onChange={(e) => setDocFile(e.target.files?.[0]?.name ?? null)}
+                className="text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:text-slate-700" />
+              <button type="submit" disabled={!docName.trim()} className={btnOutline}>Add doc</button>
+            </form>
+          </div>
+
+          {/* Submit case → triggers payment flow */}
+          {!isSubmitted && (
+            <div className={clsx(card, "p-6 border-indigo-100")}>
+              <div className="flex items-center gap-2 mb-2">
+                <HandCoins className="h-5 w-5 text-indigo-600" />
+                <h3 className="font-semibold text-slate-900">Submit case & proceed to payment</h3>
+              </div>
+              <p className="text-sm text-slate-500 mb-4">
+                Once you submit, your case is registered and you'll receive bank transfer instructions to complete the <strong>$50 platform fee</strong>.
+                Admin will verify your payment and assign a case manager + lawyer — all features unlock after that.
+              </p>
+              {paymentActionMessage && (
+                <div className={clsx("mb-3 rounded-xl px-4 py-3 text-sm border",
+                  paymentActionState === "error" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                  {paymentActionMessage}
+                </div>
+              )}
+              <button type="button" disabled={!caseDetails.trim() || paymentActionState === "loading"}
+                onClick={() => void handleSubmitCase()} className={clsx(btnPrimary, "disabled:opacity-40")}>
+                <Fingerprint className="h-4 w-4" />
+                {paymentActionState === "loading" ? "Submitting…" : "Submit case"}
+              </button>
+              <p className="mt-3 text-xs text-slate-400">
+                <Shield className="inline h-3.5 w-3.5 mr-1" />
+                All payments are verified manually by an admin. Never transfer funds outside the platform.
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -871,22 +939,33 @@ function CaseView() {
         </div>
       )}
 
-      {/* Payment plan */}
-      {(bankInstructions || paymentPlan || terms || (!platformFeePaid && paymentCaptured)) && (
+      {/* Payment plan + proof submission */}
+      {caseId && (
         <div className={clsx(card, "p-6 space-y-4")}>
           <div className="flex items-center gap-2">
             <CreditCard className="h-5 w-5 text-indigo-600" />
-            <h3 className="font-semibold text-slate-900">Payment instructions</h3>
+            <h3 className="font-semibold text-slate-900">
+              {platformFeePaid ? "Payment — approved ✓" : "Complete $50 platform fee"}
+            </h3>
           </div>
+
+          {/* Admin bank instructions (set by admin) */}
           {bankInstructions && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              <p className="font-semibold mb-1">Bank instructions</p>
+              <p className="font-semibold mb-1">Bank transfer instructions</p>
               <p className="whitespace-pre-line">{bankInstructions}</p>
             </div>
           )}
+          {!bankInstructions && !platformFeePaid && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold">Transfer $50 to admin-provided bank account</p>
+              <p className="mt-1">Bank instructions will be provided by your case admin. Once you transfer, submit your UTR / reference below as proof.</p>
+            </div>
+          )}
+
           {paymentPlan && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 whitespace-pre-line">
-              <p className="font-semibold text-slate-900 mb-1">Payment plan</p>
+              <p className="font-semibold text-slate-900 mb-1">Payment schedule</p>
               {paymentPlan}
             </div>
           )}
@@ -896,29 +975,33 @@ function CaseView() {
               {terms}
             </div>
           )}
-          {!platformFeePaid && caseId && (
-            <form onSubmit={handleProof} className="space-y-3 rounded-xl border border-dashed border-slate-300 p-4">
-              <p className="text-sm font-semibold text-slate-900">Submit payment proof</p>
+
+          {/* Proof submission form — shown until payment approved */}
+          {!platformFeePaid && (
+            <form onSubmit={handleProof} className="space-y-3 rounded-xl border border-dashed border-indigo-200 bg-indigo-50 p-4">
+              <p className="text-sm font-semibold text-indigo-900">Submit payment proof</p>
+              <p className="text-xs text-indigo-700">Enter your bank transfer UTR / reference number and any notes.</p>
               <input value={url} onChange={(e) => setUrl(e.target.value)}
-                placeholder="Reference link or UTR number" className={inputCls} />
+                placeholder="UTR / reference number or screenshot URL" className={inputCls} />
               <textarea value={note} onChange={(e) => setNote(e.target.value)}
-                rows={2} placeholder="Notes (bank, date, amount)" className={inputCls} />
+                rows={2} placeholder="Bank name, date, amount transferred…" className={inputCls} />
               <button type="submit" disabled={sending || (!url && !note)} className={btnPrimary}>
                 {sending ? "Submitting…" : "Submit proof"} <FileUp className="h-4 w-4" />
               </button>
             </form>
           )}
+
           {paymentProofs.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Submitted proofs</p>
               {paymentProofs.map((p) => (
                 <div key={p.id} className="rounded-xl border border-slate-200 p-3 text-sm">
                   <p className="text-xs text-slate-400">{p.submittedBy} · {new Date(p.submittedAt).toLocaleString()}</p>
-                  {p.url && <a href={p.url} target="_blank" rel="noreferrer" className="text-indigo-600 underline block mt-1">{p.url}</a>}
+                  {p.url && <p className="text-indigo-600 mt-1 break-all">{p.url}</p>}
                   {p.note && <p className="text-slate-700 mt-1">{p.note}</p>}
                   <span className={clsx("mt-1 inline-flex rounded-full px-2 py-0.5 text-xs",
                     p.approved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
-                    {p.approved ? "Approved" : "Pending review"}
+                    {p.approved ? "Approved ✓" : "Pending admin review"}
                   </span>
                 </div>
               ))}
@@ -972,7 +1055,8 @@ function CaseView() {
 function DocumentVault() {
   const documents = usePortalStore((s) => s.documents);
   const addDocument = usePortalStore((s) => s.addDocument);
-  const platformFeePaid = usePortalStore((s) => s.platformFeePaid);
+  const assignedPractitioner = usePortalStore((s) => s.assignedPractitioner);
+  const lawyerActivated = Boolean(assignedPractitioner);
   const [name, setName] = useState("");
   const [type, setType] = useState("Identity");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -1017,19 +1101,19 @@ function DocumentVault() {
           onSubmit={(e) => { e.preventDefault(); void addDocument(name, type, fileName ?? undefined); setName(""); setFileName(null); }}
           className="space-y-3"
         >
-          <input type="file" disabled={!platformFeePaid} onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+          <input type="file" disabled={!lawyerActivated} onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
             className="w-full text-sm text-slate-500 file:mr-3 file:rounded-xl file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white disabled:opacity-50" />
-          <input value={name} onChange={(e) => setName(e.target.value)} disabled={!platformFeePaid}
+          <input value={name} onChange={(e) => setName(e.target.value)} disabled={!lawyerActivated}
             placeholder="Document name" className={inputCls} />
-          <select value={type} onChange={(e) => setType(e.target.value)} disabled={!platformFeePaid} className={inputCls}>
+          <select value={type} onChange={(e) => setType(e.target.value)} disabled={!lawyerActivated} className={inputCls}>
             {["Identity", "Authority", "Litigation", "Compliance", "Financial", "Other"].map((t) => (
               <option key={t}>{t}</option>
             ))}
           </select>
-          <button type="submit" disabled={!platformFeePaid || !name.trim()} className={btnPrimary}>
+          <button type="submit" disabled={!lawyerActivated || !name.trim()} className={btnPrimary}>
             <FileUp className="h-4 w-4" /> Add to vault
           </button>
-          {!platformFeePaid && <p className="text-xs text-slate-400">Vault uploads unlock after fee approval.</p>}
+          {!lawyerActivated && <p className="text-xs text-slate-400">Vault uploads unlock after your lawyer is assigned.</p>}
         </form>
       </div>
     </div>
@@ -1042,7 +1126,8 @@ function DocumentVault() {
 function VideoScheduler() {
   const videoCall = usePortalStore((s) => s.videoCall);
   const scheduleVideoCall = usePortalStore((s) => s.scheduleVideoCall);
-  const platformFeePaid = usePortalStore((s) => s.platformFeePaid);
+  const assignedPractitioner = usePortalStore((s) => s.assignedPractitioner);
+  const lawyerActivated = Boolean(assignedPractitioner);
   const [slot, setSlot] = useState(() => {
     const d = new Date(Date.now() + 30 * 60 * 1000);
     return d.toISOString().slice(0, 16);
@@ -1094,21 +1179,21 @@ function VideoScheduler() {
                 value={slot}
                 onChange={(e) => setSlot(e.target.value)}
                 min={new Date().toISOString().slice(0, 16)}
-                disabled={!platformFeePaid}
+                disabled={!lawyerActivated}
                 className={clsx("mt-1", inputCls)}
               />
             </label>
             <button
               type="submit"
-              disabled={!platformFeePaid || scheduling || !slot}
+              disabled={!lawyerActivated || scheduling || !slot}
               className={clsx(btnPrimary, "w-full")}
             >
               <CalendarCheck className="h-4 w-4" />
               {scheduling ? "Scheduling…" : "Schedule consultation"}
             </button>
-            {!platformFeePaid && (
+            {!lawyerActivated && (
               <p className="text-xs text-slate-400 text-center">
-                Meeting scheduling unlocks after the platform fee is approved.
+                Meeting scheduling unlocks after your lawyer is assigned by admin.
               </p>
             )}
           </form>
@@ -1142,7 +1227,8 @@ function VideoScheduler() {
 function EscrowTracker() {
   const milestones = usePortalStore((s) => s.escrowMilestones);
   const advanceEscrow = usePortalStore((s) => s.advanceEscrow);
-  const platformFeePaid = usePortalStore((s) => s.platformFeePaid);
+  const assignedPractitioner = usePortalStore((s) => s.assignedPractitioner);
+  const lawyerActivated = Boolean(assignedPractitioner);
 
   const released = milestones.filter((m) => m.unlocked).reduce((sum, m) => sum + m.amountPct, 0);
   const total = 100;
@@ -1200,14 +1286,14 @@ function EscrowTracker() {
 
         <button
           type="button"
-          disabled={!platformFeePaid}
+          disabled={!lawyerActivated}
           onClick={() => void advanceEscrow()}
           className={clsx("mt-6 w-full", btnOutline, "disabled:opacity-40")}
         >
           <HandCoins className="h-4 w-4 text-emerald-600" /> Proceed escrow workflow
         </button>
-        {!platformFeePaid && (
-          <p className="mt-2 text-xs text-center text-slate-400">Escrow actions unlock after fee approval.</p>
+        {!lawyerActivated && (
+          <p className="mt-2 text-xs text-center text-slate-400">Escrow actions unlock after your lawyer is assigned.</p>
         )}
       </div>
     </div>

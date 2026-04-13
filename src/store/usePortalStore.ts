@@ -21,8 +21,11 @@ import type { CaseStatus, StageStatus } from "@/server/types";
 
 type JourneyStage =
   | "login"
-  | "service-selection"
-  | "fee-payment"
+  | "service-selection"    // pick service + fill case brief + upload pre-docs
+  | "payment-pending"      // case submitted, user shows bank proof, waiting admin
+  | "payment-approved"     // admin approved payment, awaiting lawyer assignment
+  | "lawyer-assigned"      // CM + lawyer both assigned → all features unlocked
+  | "fee-payment"          // legacy alias kept for old DB records
   | "case-manager-assigned"
   | "practitioner-assigned"
   | "video-scheduled"
@@ -264,6 +267,17 @@ export const usePortalStore = create<PortalState>((set, get) => {
     const stageStatus =
       (record.stageStatus as StageStatus | undefined) ?? get().stageStatus ?? "PENDING";
 
+    // Map stage to new names for backward compat with old DB records
+    const rawStage: string = record.stage ?? get().stage ?? "service-selection";
+    const stageMap: Record<string, JourneyStage> = {
+      "fee-payment": "payment-pending",
+      "case-manager-assigned": "payment-approved",
+      "practitioner-assigned": "lawyer-assigned",
+    };
+    const mappedStage: JourneyStage = (stageMap[rawStage] as JourneyStage | undefined) ?? (rawStage as JourneyStage);
+    // If lawyer assigned, always show lawyer-assigned regardless of stored stage
+    const resolvedStage: JourneyStage = practitioner ? "lawyer-assigned" : mappedStage;
+
     console.log("[debug][portal] ingestCaseRecord", {
       source,
       id: record.id,
@@ -276,7 +290,7 @@ export const usePortalStore = create<PortalState>((set, get) => {
 
     set({
       caseId: record.id,
-      stage: record.stage ?? get().stage,
+      stage: resolvedStage,
       paymentStatus: record.paymentStatus ?? "pending",
       platformFeePaid,
       paymentCaptured,
@@ -572,7 +586,7 @@ export const usePortalStore = create<PortalState>((set, get) => {
         stageStatus: (record as any).stageStatus ?? get().stageStatus,
         paymentStatus: record.paymentStatus ?? "pending",
         platformFeePaid: Boolean(record.platformFeePaid) || record.paymentStatus === "approved",
-        paymentCaptured: hasPaymentCaptureEvent(record.timeline) || record.paymentStatus === "approved",
+        paymentCaptured: hasPaymentCaptureEvent(record.timeline) || record.paymentStatus === "approved" || Boolean((record as any).paymentProofs?.length),
         paymentActionState: "idle",
         paymentActionMessage: undefined,
         caseDetails: record.caseDetails ?? undefined,
@@ -619,265 +633,72 @@ export const usePortalStore = create<PortalState>((set, get) => {
   selectService: (serviceId) => {
     const svc = legalServices.find((s) => s.id === serviceId);
     if (!svc) return;
-    const timeline = get().timeline.map((item, idx, arr) =>
-      idx === arr.length - 1 ? { ...item, status: "done" as const } : item
-    );
-    timeline.push({
-      id: `evt-${serviceId}`,
-      title: `${svc.label} selected`,
-      timestamp: formatTimestamp(),
-      description: svc.summary,
-      actor: "Client",
-      status: "live" as const,
-    });
+    // Stay on service-selection so user can fill brief + upload docs before paying
     set({
       selectedService: svc,
-      stage: "fee-payment",
+      stage: "service-selection",
       paymentCaptured: false,
       paymentActionState: "idle",
       paymentActionMessage: undefined,
-      timeline,
     });
   },
 
   capturePlatformFee: async () => {
-    const { selectedService, user, escrowMilestones, caseId, platformFeePaid } = get();
+    // Simplified: just create the case record so user can submit payment proof.
+    // No Razorpay — payment is manual bank transfer verified by admin.
+    const { selectedService, user, escrowMilestones, caseId } = get();
     if (!selectedService || !user) return;
-
-    // Signup fee already paid globally: create case immediately (no checkout)
-    if (platformFeePaid) {
-      let workingCaseId = caseId;
-      let workingTimeline = get().timeline;
-      let workingEscrow = escrowMilestones;
-      if (!workingCaseId) {
-        const timeline = get().timeline.map((item, idx, arr) =>
-          idx === arr.length - 1 ? { ...item, status: "done" as const } : item
-        );
-        timeline.push({
-          id: "evt-platform-fee",
-          title: "Signup fee already completed",
-          timestamp: formatTimestamp(),
-          description: "$50 signup payment recorded. Case can proceed.",
-          actor: "Billing Desk",
-          status: "live" as const,
-        });
-        const updatedEscrow = escrowMilestones.map((milestone, index) =>
-          index === 0 ? { ...milestone, unlocked: true } : milestone
-        );
-        try {
-          const record = await createCaseRecord({
-            user,
-            serviceId: selectedService.id,
-            stage: "case-manager-assigned",
-            caseStatus: "IN_PROGRESS",
-            stageStatus: "PAID",
-            platformFeePaid: true,
-            paymentStatus: "approved",
-            caseDetails: get().caseDetails,
-            timeline,
-            escrowMilestones: updatedEscrow,
-            paymentPlan: get().paymentPlan,
-            bankInstructions: get().bankInstructions,
-            terms: get().terms,
-          } as any);
-          workingCaseId = record.id;
-          workingTimeline = (record.timeline as TimelineEvent[] | undefined) ?? timeline;
-          workingEscrow = (record.escrowMilestones as EscrowMilestone[] | undefined) ?? updatedEscrow;
-          set({
-            platformFeePaid: true,
-            paymentStatus: "approved",
-            paymentCaptured: true,
-            stage: record.stage ?? "case-manager-assigned",
-            caseStatus: (record as any).caseStatus ?? "IN_PROGRESS",
-            stageStatus: (record as any).stageStatus ?? "PAID",
-            timeline: workingTimeline,
-            escrowMilestones: workingEscrow,
-            caseId: record.id,
-            caseSummary: record.caseSummary ?? undefined,
-          });
-        } catch (error) {
-          console.error("Failed to create case without checkout", error);
-        }
-      } else {
-        set({
-          paymentStatus: "approved",
-          platformFeePaid: true,
-          paymentCaptured: true,
-          stage: "case-manager-assigned",
-          caseStatus: "IN_PROGRESS",
-          stageStatus: "PAID",
-        });
-      }
+    if (caseId) {
+      // Case already exists; transition to payment-pending to show proof form
+      set({ stage: "payment-pending", paymentActionState: "idle" });
       return;
     }
-
-    set({
-      paymentActionState: "loading",
-      paymentActionMessage: "Preparing secure checkout...",
+    set({ paymentActionState: "loading", paymentActionMessage: "Registering case…" });
+    const timeline = get().timeline.concat({
+      id: "evt-case-submitted",
+      title: "Case submitted",
+      timestamp: formatTimestamp(),
+      description: `${selectedService.label} case registered. Awaiting $50 platform fee.`,
+      actor: "Client",
+      status: "live" as const,
     });
-
-    let workingCaseId = caseId;
-    let workingTimeline = get().timeline;
-    let workingEscrow = escrowMilestones;
-
-    if (!workingCaseId) {
-      const timeline = get().timeline.map((item, idx, arr) =>
-        idx === arr.length - 1 ? { ...item, status: "done" as const } : item
-      );
-      timeline.push({
-        id: "evt-platform-fee",
-        title: "Platform fee request submitted",
-        timestamp: formatTimestamp(),
-        description: "$50 request sent for checkout and admin approval.",
-        actor: "Billing Desk",
-        status: "live" as const,
-      });
-      const updatedEscrow = escrowMilestones.map((milestone, index) =>
-        index === 0 ? { ...milestone, unlocked: true } : milestone
-      );
-
-      try {
-        const record = await createCaseRecord({
-          user,
-          serviceId: selectedService.id,
-          stage: "fee-payment",
-          platformFeePaid: false,
-          paymentStatus: "pending",
-          caseDetails: get().caseDetails,
-          timeline,
-          escrowMilestones: updatedEscrow,
-        });
-
-        workingCaseId = record.id;
-        workingTimeline = (record.timeline as TimelineEvent[] | undefined) ?? timeline;
-        workingEscrow = (record.escrowMilestones as EscrowMilestone[] | undefined) ?? updatedEscrow;
-
-        set({
-          platformFeePaid: false,
-          paymentStatus: "pending",
-          paymentCaptured: hasPaymentCaptureEvent(record.timeline),
-          stage: "fee-payment",
-          timeline: workingTimeline,
-          escrowMilestones: workingEscrow,
-          caseId: record.id,
-          caseSummary: record.caseSummary ?? undefined,
-        });
-      } catch (error) {
-        console.error("Failed to persist case", error);
-        set({
-          platformFeePaid: false,
-          paymentStatus: "pending",
-          paymentCaptured: false,
-          paymentActionState: "error",
-          paymentActionMessage: "Unable to initialize case for payment. Please retry.",
-          stage: "fee-payment",
-          timeline,
-          escrowMilestones: updatedEscrow,
-        });
-        return;
-      }
-    }
-
-    if (!workingCaseId) {
-      set({
-        paymentActionState: "error",
-        paymentActionMessage: "Missing case context for payment.",
-      });
-      return;
-    }
-
     try {
-      const order = await createRazorpayOrder({ caseId: workingCaseId });
-
-      let paymentSignal: { orderId: string; paymentId: string; signature: string };
-      if (order.mode === "mock") {
-        paymentSignal = {
-          orderId: order.order.id,
-          paymentId: `pay_mock_${Date.now()}`,
-          signature: "mock_signature",
-        };
-      } else {
-        if (!order.keyId) {
-          throw new Error("Payment gateway configuration missing checkout key.");
-        }
-        paymentSignal = await openRazorpayCheckout({
-          keyId: order.keyId,
-          orderId: order.order.id,
-          amount: order.order.amount,
-          currency: order.order.currency,
-          name: "NRI Law Buddy",
-          description: "Platform fee",
-          prefill: {
-            name: user.fullName,
-            email: user.email,
-          },
-        });
-      }
-
-      const verification = await verifyRazorpayPayment({
-        caseId: workingCaseId,
-        orderId: paymentSignal.orderId,
-        paymentId: paymentSignal.paymentId,
-        signature: paymentSignal.signature,
-      });
-
-      if (!verification.verified) {
-        throw new Error("Payment verification failed.");
-      }
-
-      const timeline = (get().timeline.length ? get().timeline : workingTimeline).map(
-        (item, idx, arr) => (idx === arr.length - 1 ? { ...item, status: "done" as const } : item)
-      );
-      const paymentEntry: TimelineEvent = {
-        id: `evt-payment-verified-${Date.now()}`,
-        title: "Payment captured",
-        timestamp: formatTimestamp(),
-        description: "Razorpay payment verified. Awaiting admin approval.",
-        actor: "Billing Desk",
-        status: "live",
-      };
-      timeline.push(paymentEntry);
-
-      try {
-        const record = await updateCaseRecord(workingCaseId, {
-          timelineEntry: paymentEntry,
-        });
-        set({
-          timeline: (record.timeline as TimelineEvent[] | undefined) ?? timeline,
-        });
-      } catch (error) {
-        console.error("Failed to persist payment timeline entry", error);
-        set({ timeline });
-      }
-
-      set({
-        platformFeePaid: false,
-        paymentStatus: verification.paymentStatus,
-        paymentCaptured: true,
-        paymentActionState: "success",
-        paymentActionMessage: verification.requiresAdminApproval
-          ? "Payment verified. Admin approval is pending."
-          : "Payment verified successfully.",
-        stage: "fee-payment",
-        caseStatus: "PAYMENT_PENDING",
-        stageStatus: "PAYMENT_SUBMITTED",
-        escrowMilestones: workingEscrow,
-        caseId: workingCaseId,
-      });
-    } catch (error) {
-      console.error("Payment checkout failed", error);
-      set({
-        paymentActionState: "error",
-        paymentActionMessage: mapPaymentError(error),
-        paymentCaptured: false,
+      const record = await createCaseRecord({
+        user,
+        serviceId: selectedService.id,
+        stage: "payment-pending",
+        caseStatus: "SUBMITTED",
+        stageStatus: "AWAITING_PAYMENT",
         platformFeePaid: false,
         paymentStatus: "pending",
+        caseDetails: get().caseDetails,
+        timeline,
+        escrowMilestones,
+      } as any);
+      set({
+        caseId: record.id,
+        stage: "payment-pending",
+        caseStatus: "SUBMITTED",
+        stageStatus: "AWAITING_PAYMENT",
+        paymentStatus: "pending",
+        paymentCaptured: false,
+        platformFeePaid: false,
+        timeline: (record.timeline as TimelineEvent[] | undefined) ?? timeline,
+        caseSummary: record.caseSummary ?? undefined,
+        paymentActionState: "idle",
+        paymentActionMessage: undefined,
+      });
+    } catch (error) {
+      console.error("Failed to create case", error);
+      set({
+        paymentActionState: "error",
+        paymentActionMessage: error instanceof Error ? error.message : "Case creation failed",
       });
     }
   },
 
   scheduleVideoCall: async (when) => {
-    if (!get().platformFeePaid) return;
+    if (!get().assignedPractitioner) return;  // must have lawyer assigned
     const { caseId } = get();
     if (!caseId) return;
 
@@ -922,7 +743,8 @@ export const usePortalStore = create<PortalState>((set, get) => {
   },
 
   addDocument: async (name, type, fileName) => {
-    if (!get().platformFeePaid) return;
+    // Pre-case docs allowed from service-selection/payment-pending too
+    const { caseId } = get();
     const documentRecord = {
       id: `doc-${Date.now()}`,
       name,
@@ -932,8 +754,8 @@ export const usePortalStore = create<PortalState>((set, get) => {
       summary: `${type} uploaded by client${fileName ? ` (${fileName})` : ""}. OCR & clause extraction running.`,
     };
     const documents = [...get().documents, documentRecord];
-    set({ documents, stage: "documents" });
-    const { caseId } = get();
+    // Don't overwrite current stage when adding docs
+    set({ documents });
     if (caseId) {
       try {
         await updateCaseRecord(caseId, {
@@ -955,6 +777,7 @@ export const usePortalStore = create<PortalState>((set, get) => {
     if (!caseId) return;
     try {
       await updateCaseRecord(caseId, { paymentProof: payload } as any);
+      set({ stage: "payment-pending", paymentCaptured: true });
       await get().refreshCaseStatus();
     } catch (error) {
       console.error("Failed to submit payment proof", error);
@@ -962,7 +785,7 @@ export const usePortalStore = create<PortalState>((set, get) => {
   },
 
   advanceEscrow: async () => {
-    if (!get().platformFeePaid) return;
+    if (!get().assignedPractitioner) return;  // must have lawyer assigned
     const current = get().escrowMilestones;
     const nextIndex = current.findIndex((item) => !item.unlocked);
     if (nextIndex === -1) return;

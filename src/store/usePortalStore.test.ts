@@ -57,6 +57,7 @@ describe("usePortalStore", () => {
       caseId: "CASE-1001",
       platformFeePaid: true,
       paymentStatus: "approved",
+      assignedPractitioner: { id: "LAW-001", name: "Test Lawyer", bar: "NY", focus: "Property" },
     });
 
     await store.scheduleVideoCall(slot);

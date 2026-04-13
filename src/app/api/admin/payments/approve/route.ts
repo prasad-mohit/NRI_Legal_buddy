@@ -17,9 +17,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Missing caseId" }, { status: 400 });
   }
 
-  const state = await checkCaseState(body.caseId, ["PAYMENT_PENDING"]);
+  const state = await checkCaseState(body.caseId, ["PAYMENT_PENDING", "SUBMITTED", "UNDER_REVIEW", "AWAITING_CLIENT_APPROVAL"]);
   if (state.response) return state.response;
   const stageState = await checkStageState(body.caseId, [
+    "PENDING",
     "AWAITING_PAYMENT",
     "PAYMENT_SUBMITTED",
     "PAID",
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   const current = state.record ?? stageState.record;
   const currentCaseStatus = normalizeCaseStatus(current?.caseStatus as any);
   const currentStageStatus = normalizeStageStatus(current?.stageStatus as any);
-  const nextCaseStatus = "IN_PROGRESS";
+  const nextCaseStatus = "AWAITING_ASSIGNMENT";
   const nextStageStatus = "PAID";
 
   validateCaseTransition(currentCaseStatus, nextCaseStatus);
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
         platformFeePaid: true,
         stageStatus: nextStageStatus,
         caseStatus: nextCaseStatus,
-        stage: current.stage ?? "case-manager-assigned",
+        stage: "payment-approved",
       },
     });
   });

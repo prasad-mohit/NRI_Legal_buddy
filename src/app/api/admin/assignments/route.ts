@@ -33,13 +33,14 @@ export async function POST(req: Request) {
 
   let record;
   try {
+    const hasBoth = Boolean(body.caseManager) && Boolean(body.practitioner);
     record = await updateCase(body.caseId, {
       caseManagerId: body.caseManager?.id,
       practitionerId: body.practitioner?.id,
       caseManagerInfo: body.caseManager,
       practitionerInfo: body.practitioner,
-      stage: body.practitioner ? "practitioner-assigned" : "case-manager-assigned",
-      caseStatus: body.practitioner ? "AWAITING_CLIENT_APPROVAL" : "UNDER_REVIEW",
+      stage: hasBoth ? "lawyer-assigned" : "payment-approved",
+      caseStatus: hasBoth ? "IN_PROGRESS" : "AWAITING_ASSIGNMENT",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Illegal state transition";

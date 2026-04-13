@@ -3,6 +3,7 @@ export type CaseStatus =
   | "UNDER_REVIEW"
   | "AWAITING_CLIENT_APPROVAL"
   | "PAYMENT_PENDING"
+  | "AWAITING_ASSIGNMENT"
   | "IN_PROGRESS"
   | "CLOSED";
 
@@ -18,6 +19,10 @@ export type StageStatus =
 export type CaseStage =
   | "service-selection"
   | "fee-payment"
+  | "case-details"
+  | "payment-pending"
+  | "payment-approved"
+  | "lawyer-assigned"
   | "case-manager-assigned"
   | "practitioner-assigned"
   | "video-scheduled"
