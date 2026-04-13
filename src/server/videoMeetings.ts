@@ -1,14 +1,10 @@
+/**
+ * Video meeting management using Jitsi Meet.
+ * No proprietary SDK or AWS credentials required.
+ * Uses the public meet.jit.si server by default, or set JITSI_BASE_URL env var
+ * to point to a self-hosted Jitsi instance.
+ */
 import { randomUUID } from "crypto";
-
-import {
-  ChimeSDKMeetingsClient,
-  CreateAttendeeCommand,
-  CreateMeetingCommand,
-  DeleteAttendeeCommand,
-  GetMeetingCommand,
-  type Attendee,
-  type Meeting,
-} from "@aws-sdk/client-chime-sdk-meetings";
 
 import { writeAuditLog } from "@/server/audit-log";
 import prisma from "@/server/db";
@@ -17,36 +13,15 @@ import { ensureRuntimeSchema } from "@/server/runtime-schema";
 import { getCase, logTimelineEntry, updateCase } from "@/server/storage";
 import type { CaseRecord } from "@/server/types";
 
-const VIDEO_PROVIDER = "amazon-chime";
-const EARLY_JOIN_WINDOW_MS = 45 * 60 * 1000;
-const LATE_JOIN_WINDOW_MS = 12 * 60 * 60 * 1000;
+const VIDEO_PROVIDER = "jitsi-meet";
+const EARLY_JOIN_WINDOW_MS = 60 * 60 * 1000; // 1 hour before
+const LATE_JOIN_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 hours after
 
 interface SessionContext {
   id: string;
   subjectId: string;
   effectiveRole: string;
   effectiveEmail: string;
-}
-
-interface MeetingRow {
-  id: string;
-  caseId: string;
-  scheduledAt: string;
-  link: string;
-  provider: string;
-  createdByEmail: string;
-  createdAt: string;
-  chimeMeetingId: string | null;
-  chimeExternalMeetingId: string | null;
-  mediaRegion: string | null;
-}
-
-interface ActiveAttendeeRow {
-  id: string;
-  attendeeId: string;
-  externalUserId: string;
-  issuedAt: string;
-  expiresAt: string;
 }
 
 export interface VideoMeetingRecord {
@@ -57,23 +32,36 @@ export interface VideoMeetingRecord {
   provider: string;
   createdByEmail: string;
   createdAt: string;
-  chimeMeetingId: string;
-  chimeExternalMeetingId: string;
-  mediaRegion: string;
+  roomName: string;
 }
 
 export interface VideoJoinTokenRecord {
   meetingRecord: VideoMeetingRecord;
-  meeting: Meeting;
-  attendee: Attendee;
+  meetingId: string;
   attendeeId: string;
+  joinUrl: string;
   expiresAt: string;
 }
 
-const normalizeEmail = (value: string) => value.trim().toLowerCase();
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-const toComparable = (value: string | undefined | null) =>
-  (value ?? "").trim().toLowerCase();
+const normalizeEmail = (v: string) => v.trim().toLowerCase();
+const toComparable = (v: string | undefined | null) => (v ?? "").trim().toLowerCase();
+
+const getJitsiBaseUrl = () => {
+  const raw = process.env.JITSI_BASE_URL ?? process.env.NEXT_PUBLIC_JITSI_URL ?? "https://meet.jit.si";
+  return raw.replace(/\/+$/, "");
+};
+
+const getAppBaseUrl = () => {
+  const raw =
+    process.env.APP_BASE_URL ??
+    process.env.NEXT_PUBLIC_APP_BASE_URL ??
+    "http://localhost:3000";
+  return raw.replace(/\/+$/, "");
+};
 
 const normalizeScheduledAt = (value: string) => {
   const trimmed = value.trim();
@@ -83,183 +71,54 @@ const normalizeScheduledAt = (value: string) => {
   return new Date(parsed).toISOString();
 };
 
-const sanitizeExternalId = (value: string, maxLength: number) => {
-  const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, "");
-  const trimmed = sanitized.slice(0, maxLength);
-  return trimmed || randomUUID().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, maxLength);
+/** Generate a URL-safe Jitsi room name tied to the case. */
+const generateRoomName = (caseId: string): string => {
+  const sanitized = caseId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 8);
+  return `nrilegal-${sanitized}-${suffix}`;
 };
 
-const getMediaRegion = () =>
-  (process.env.CHIME_MEDIA_REGION ?? process.env.AWS_REGION ?? "us-east-1").trim();
-
-const getJoinTokenTtlSeconds = () => {
-  const raw = Number(process.env.CHIME_JOIN_TOKEN_TTL_SECONDS ?? 900);
-  if (!Number.isFinite(raw)) return 900;
-  return Math.min(1800, Math.max(120, Math.trunc(raw)));
-};
-
-const getAppBaseUrl = () => {
-  const raw =
-    process.env.APP_BASE_URL ??
-    process.env.NEXT_PUBLIC_APP_BASE_URL ??
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    "http://localhost:3000";
-  return raw.replace(/\/+$/, "");
-};
-
-const mapMeetingRow = (row: MeetingRow): VideoMeetingRecord => {
-  if (!row.chimeMeetingId || !row.chimeExternalMeetingId || !row.mediaRegion) {
-    throw new Error("MEETING_METADATA_INCOMPLETE");
-  }
-
-  return {
-    id: row.id,
-    caseId: row.caseId,
-    scheduledAt: row.scheduledAt,
-    link: row.link,
-    provider: row.provider,
-    createdByEmail: row.createdByEmail,
-    createdAt: row.createdAt,
-    chimeMeetingId: row.chimeMeetingId,
-    chimeExternalMeetingId: row.chimeExternalMeetingId,
-    mediaRegion: row.mediaRegion,
-  };
-};
-
-let chimeClient: ChimeSDKMeetingsClient | null = null;
-
-const getChimeClient = () => {
-  if (chimeClient) return chimeClient;
-  chimeClient = new ChimeSDKMeetingsClient({
-    region: process.env.AWS_REGION ?? "us-east-1",
-  });
-  return chimeClient;
+const buildJitsiUrl = (roomName: string): string => {
+  const base = getJitsiBaseUrl();
+  return `${base}/${encodeURIComponent(roomName)}`;
 };
 
 const isLawyerAssignedToCase = (record: CaseRecord, session: SessionContext) => {
   const sessionUserId = toComparable(session.subjectId);
   const sessionEmail = toComparable(session.effectiveEmail);
   const assignedValues = [record.practitionerId, record.practitionerInfo?.id]
-    .filter((value): value is string => Boolean(value))
+    .filter((v): v is string => Boolean(v))
     .map(toComparable);
-
-  return assignedValues.some((value) => value === sessionUserId || value === sessionEmail);
+  return assignedValues.some((v) => v === sessionUserId || v === sessionEmail);
 };
 
 const assertCaseAccess = (record: CaseRecord, session: SessionContext) => {
   const role = session.effectiveRole;
   if (role === "admin" || role === "super-admin") return;
-
   if (role === "client") {
-    if (normalizeEmail(record.user.email) !== normalizeEmail(session.effectiveEmail)) {
+    if (normalizeEmail(record.user.email) !== normalizeEmail(session.effectiveEmail))
       throw new Error("CASE_ACCESS_DENIED");
-    }
     return;
   }
-
   if (role === "lawyer") {
-    if (!isLawyerAssignedToCase(record, session)) {
-      throw new Error("CASE_ACCESS_DENIED");
-    }
+    if (!isLawyerAssignedToCase(record, session)) throw new Error("CASE_ACCESS_DENIED");
     return;
   }
-
   throw new Error("CASE_ACCESS_DENIED");
 };
 
-const getVideoMeetingById = async (meetingId: string): Promise<VideoMeetingRecord | null> => {
-  await ensureRuntimeSchema();
-  const rows = await prisma.$queryRaw<MeetingRow[]>`
-    SELECT id, caseId, scheduledAt, link, provider, createdByEmail, createdAt,
-           chimeMeetingId, chimeExternalMeetingId, mediaRegion
-    FROM Meeting
-    WHERE id = ${meetingId}
-      AND provider = ${VIDEO_PROVIDER}
-    LIMIT 1
-  `;
-  const row = rows[0];
-  if (!row) return null;
-  return mapMeetingRow(row);
-};
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
-const revokeAttendeeRows = async (payload: {
-  meeting: VideoMeetingRecord;
-  session: SessionContext;
-  attendeeRows: ActiveAttendeeRow[];
-}) => {
-  if (!payload.attendeeRows.length) return;
-
-  const client = getChimeClient();
-  const revokedAt = new Date().toISOString();
-
-  for (const attendeeRow of payload.attendeeRows) {
-    try {
-      await client.send(
-        new DeleteAttendeeCommand({
-          MeetingId: payload.meeting.chimeMeetingId,
-          AttendeeId: attendeeRow.attendeeId,
-        })
-      );
-    } catch (error) {
-      logEvent("warn", "video.attendee_delete_failed", {
-        meetingId: payload.meeting.id,
-        chimeMeetingId: payload.meeting.chimeMeetingId,
-        attendeeId: attendeeRow.attendeeId,
-        actor: payload.session.effectiveEmail,
-        error: error instanceof Error ? error.message : "unknown",
-      });
-    }
-  }
-
-  for (const attendeeRow of payload.attendeeRows) {
-    await prisma.$executeRaw`
-      UPDATE MeetingAttendeeSession
-      SET revokedAt = ${revokedAt}
-      WHERE id = ${attendeeRow.id}
-        AND revokedAt IS NULL
-    `;
-  }
-};
-
-const revokeExistingActiveAttendees = async (payload: {
-  meeting: VideoMeetingRecord;
-  session: SessionContext;
-}) => {
-  const rows = await prisma.$queryRaw<ActiveAttendeeRow[]>`
-    SELECT id, attendeeId, externalUserId, issuedAt, expiresAt
-    FROM MeetingAttendeeSession
-    WHERE meetingId = ${payload.meeting.id}
-      AND userEmail = ${normalizeEmail(payload.session.effectiveEmail)}
-      AND revokedAt IS NULL
-    ORDER BY issuedAt DESC
-  `;
-  await revokeAttendeeRows({
-    meeting: payload.meeting,
-    session: payload.session,
-    attendeeRows: rows,
-  });
-};
-
-const assertJoinWindow = (scheduledAt: string) => {
-  const scheduledAtMs = Date.parse(scheduledAt);
-  if (Number.isNaN(scheduledAtMs)) {
-    throw new Error("INVALID_SCHEDULED_AT");
-  }
-
-  const now = Date.now();
-  if (now < scheduledAtMs - EARLY_JOIN_WINDOW_MS) {
-    throw new Error("MEETING_JOIN_TOO_EARLY");
-  }
-  if (now > scheduledAtMs + LATE_JOIN_WINDOW_MS) {
-    throw new Error("MEETING_JOIN_WINDOW_CLOSED");
-  }
-};
-
+/**
+ * Create a Jitsi Meet room and persist the meeting record.
+ */
 export const createVideoMeetingForCase = async (payload: {
   caseId: string;
   scheduledAt: string;
   session: SessionContext;
-}) => {
+}): Promise<{ meeting: VideoMeetingRecord; caseRecord: CaseRecord | null }> => {
   await ensureRuntimeSchema();
 
   const caseRecord = await getCase(payload.caseId);
@@ -267,238 +126,136 @@ export const createVideoMeetingForCase = async (payload: {
   assertCaseAccess(caseRecord, payload.session);
 
   const scheduledAt = normalizeScheduledAt(payload.scheduledAt);
-  if (!scheduledAt) {
-    throw new Error("INVALID_SCHEDULED_AT");
-  }
+  if (!scheduledAt) throw new Error("INVALID_SCHEDULED_AT");
 
+  const roomName = generateRoomName(payload.caseId);
+  const joinUrl = buildJitsiUrl(roomName);
   const meetingId = `MTG-${randomUUID()}`;
-  const chimeExternalMeetingId = sanitizeExternalId(`${payload.caseId}-${meetingId}`, 64);
-  const mediaRegion = getMediaRegion();
 
-  const client = getChimeClient();
-  const createMeetingResponse = await client.send(
-    new CreateMeetingCommand({
-      ClientRequestToken: randomUUID(),
-      ExternalMeetingId: chimeExternalMeetingId,
-      MediaRegion: mediaRegion,
-    })
-  );
-
-  const chimeMeetingId = createMeetingResponse.Meeting?.MeetingId;
-  if (!chimeMeetingId) {
-    throw new Error("CHIME_MEETING_CREATE_FAILED");
-  }
-
-  const link = `${getAppBaseUrl()}/meeting/${encodeURIComponent(meetingId)}`;
-
-  await prisma.$executeRaw`
-    INSERT INTO Meeting (
-      id, caseId, scheduledAt, link, provider, createdByEmail,
-      chimeMeetingId, chimeExternalMeetingId, mediaRegion, createdAt
-    )
-    VALUES (
-      ${meetingId},
-      ${payload.caseId},
-      ${scheduledAt},
-      ${link},
-      ${VIDEO_PROVIDER},
-      ${normalizeEmail(payload.session.effectiveEmail)},
-      ${chimeMeetingId},
-      ${chimeExternalMeetingId},
-      ${mediaRegion},
-      CURRENT_TIMESTAMP
-    )
-  `;
-
-  let updatedCase = await updateCase(payload.caseId, {
-    stage: "video-scheduled",
-    videoSlot: scheduledAt,
-    videoLink: link,
+  await prisma.meeting.create({
+    data: {
+      id: meetingId,
+      caseId: payload.caseId,
+      scheduledAt,
+      link: joinUrl,
+      provider: VIDEO_PROVIDER,
+      createdByEmail: normalizeEmail(payload.session.effectiveEmail),
+    },
   });
 
-  updatedCase = await logTimelineEntry(payload.caseId, {
+  const timelineEntry = {
     id: `evt-video-${Date.now()}`,
     title: "Video consultation scheduled",
-    description: `Amazon Chime meeting confirmed for ${scheduledAt}.`,
+    timestamp: new Date().toLocaleDateString("en-GB", {
+      day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+    } as Intl.DateTimeFormatOptions),
+    description: `Jitsi Meet consultation confirmed for ${scheduledAt}. Join link sent.`,
     actor: payload.session.effectiveRole === "lawyer" ? "Practitioner" : "Operations",
-    timestamp: new Date().toISOString(),
-    status: "live",
+    status: "live" as const,
+  };
+
+  const updatedCase = await logTimelineEntry(payload.caseId, timelineEntry);
+
+  // Update case stage and video slot separately
+  await updateCase(payload.caseId, {
+    stage: "video-scheduled",
+    videoSlot: scheduledAt,
+    videoLink: joinUrl,
+  });
+
+  logEvent("info", "video.meeting.created", {
+    meetingId,
+    caseId: payload.caseId,
+    scheduledAt,
+    provider: VIDEO_PROVIDER,
+    createdBy: payload.session.effectiveEmail,
+    roomName,
   });
 
   await writeAuditLog({
     actorEmail: payload.session.effectiveEmail,
     actorRole: payload.session.effectiveRole,
-    action: "video.meeting.create",
+    action: "video.meeting.created",
     targetType: "meeting",
     targetId: meetingId,
-    details: {
-      caseId: payload.caseId,
-      chimeMeetingId,
-      mediaRegion,
-      scheduledAt,
-    },
-  });
-
-  const meetingRecord = await getVideoMeetingById(meetingId);
-  if (!meetingRecord) {
-    throw new Error("MEETING_NOT_FOUND_AFTER_CREATE");
-  }
-
-  logEvent("info", "video.meeting_created", {
-    meetingId,
-    caseId: payload.caseId,
-    actor: payload.session.effectiveEmail,
-    mediaRegion,
+    details: { caseId: payload.caseId, scheduledAt, roomName },
   });
 
   return {
-    meeting: meetingRecord,
+    meeting: {
+      id: meetingId,
+      caseId: payload.caseId,
+      scheduledAt,
+      link: joinUrl,
+      provider: VIDEO_PROVIDER,
+      createdByEmail: normalizeEmail(payload.session.effectiveEmail),
+      createdAt: new Date().toISOString(),
+      roomName,
+    },
     caseRecord: updatedCase,
   };
 };
 
+/**
+ * Get a join token (Jitsi URL) for an existing meeting.
+ */
 export const createJoinTokenForMeeting = async (payload: {
   meetingId: string;
   session: SessionContext;
 }): Promise<VideoJoinTokenRecord> => {
   await ensureRuntimeSchema();
 
-  const meetingRecord = await getVideoMeetingById(payload.meetingId);
-  if (!meetingRecord) {
-    throw new Error("MEETING_NOT_FOUND");
-  }
+  const row = await prisma.meeting.findUnique({ where: { id: payload.meetingId } });
+  if (!row) throw new Error("MEETING_NOT_FOUND");
 
-  const caseRecord = await getCase(meetingRecord.caseId);
-  if (!caseRecord) {
-    throw new Error("CASE_NOT_FOUND");
-  }
+  const caseRecord = await getCase(row.caseId);
+  if (!caseRecord) throw new Error("CASE_NOT_FOUND");
   assertCaseAccess(caseRecord, payload.session);
-  assertJoinWindow(meetingRecord.scheduledAt);
 
-  await revokeExistingActiveAttendees({
-    meeting: meetingRecord,
-    session: payload.session,
-  });
-
-  const client = getChimeClient();
-  const meetingResponse = await client.send(
-    new GetMeetingCommand({
-      MeetingId: meetingRecord.chimeMeetingId,
-    })
-  );
-  if (!meetingResponse.Meeting) {
-    throw new Error("CHIME_MEETING_NOT_FOUND");
+  // Validate join window
+  const now = Date.now();
+  const scheduledTime = Date.parse(row.scheduledAt);
+  if (!Number.isNaN(scheduledTime)) {
+    if (now < scheduledTime - EARLY_JOIN_WINDOW_MS) throw new Error("MEETING_NOT_YET_OPEN");
+    if (now > scheduledTime + LATE_JOIN_WINDOW_MS) throw new Error("MEETING_EXPIRED");
   }
 
-  const externalUserId = sanitizeExternalId(
-    `${payload.session.effectiveRole}-${payload.session.subjectId}-${Date.now()}`,
-    64
-  );
-  const attendeeResponse = await client.send(
-    new CreateAttendeeCommand({
-      MeetingId: meetingRecord.chimeMeetingId,
-      ExternalUserId: externalUserId,
-    })
-  );
-  const attendee = attendeeResponse.Attendee;
-  if (!attendee?.AttendeeId || !attendee.JoinToken) {
-    throw new Error("CHIME_ATTENDEE_CREATE_FAILED");
-  }
+  const joinUrl = row.link;
+  const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
-  const ttlSeconds = getJoinTokenTtlSeconds();
-  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
-  const attendeeSessionId = `ATS-${randomUUID()}`;
-  await prisma.$executeRaw`
-    INSERT INTO MeetingAttendeeSession (
-      id, meetingId, caseId, attendeeId, externalUserId, userEmail, userRole, issuedAt, expiresAt
-    )
-    VALUES (
-      ${attendeeSessionId},
-      ${meetingRecord.id},
-      ${meetingRecord.caseId},
-      ${attendee.AttendeeId},
-      ${externalUserId},
-      ${normalizeEmail(payload.session.effectiveEmail)},
-      ${payload.session.effectiveRole},
-      CURRENT_TIMESTAMP,
-      ${expiresAt}
-    )
-  `;
-
-  await writeAuditLog({
-    actorEmail: payload.session.effectiveEmail,
-    actorRole: payload.session.effectiveRole,
-    action: "video.meeting.join",
-    targetType: "meeting",
-    targetId: meetingRecord.id,
-    details: {
-      caseId: meetingRecord.caseId,
-      attendeeId: attendee.AttendeeId,
-      attendeeSessionId,
-      expiresAt,
-    },
+  logEvent("info", "video.join.issued", {
+    meetingId: payload.meetingId,
+    caseId: row.caseId,
+    user: payload.session.effectiveEmail,
   });
 
   return {
-    meetingRecord,
-    meeting: meetingResponse.Meeting,
-    attendee,
-    attendeeId: attendee.AttendeeId,
+    meetingRecord: {
+      id: row.id,
+      caseId: row.caseId,
+      scheduledAt: row.scheduledAt,
+      link: row.link,
+      provider: row.provider,
+      createdByEmail: row.createdByEmail,
+      createdAt: new Date(row.createdAt).toISOString(),
+      roomName: "",
+    },
+    meetingId: row.id,
+    attendeeId: randomUUID(),
+    joinUrl,
     expiresAt,
   };
 };
 
+/**
+ * Leave / end meeting � Jitsi users just close the tab, so this is a no-op.
+ */
 export const leaveVideoMeeting = async (payload: {
   meetingId: string;
-  attendeeId: string;
   session: SessionContext;
-}) => {
-  await ensureRuntimeSchema();
-
-  const meetingRecord = await getVideoMeetingById(payload.meetingId);
-  if (!meetingRecord) {
-    throw new Error("MEETING_NOT_FOUND");
-  }
-
-  const caseRecord = await getCase(meetingRecord.caseId);
-  if (!caseRecord) {
-    throw new Error("CASE_NOT_FOUND");
-  }
-  assertCaseAccess(caseRecord, payload.session);
-
-  const rows = await prisma.$queryRaw<ActiveAttendeeRow[]>`
-    SELECT id, attendeeId, externalUserId, issuedAt, expiresAt
-    FROM MeetingAttendeeSession
-    WHERE meetingId = ${meetingRecord.id}
-      AND attendeeId = ${payload.attendeeId}
-      AND userEmail = ${normalizeEmail(payload.session.effectiveEmail)}
-      AND revokedAt IS NULL
-    ORDER BY issuedAt DESC
-    LIMIT 1
-  `;
-
-  const attendeeRow = rows[0];
-  if (!attendeeRow) {
-    return { ok: true };
-  }
-
-  await revokeAttendeeRows({
-    meeting: meetingRecord,
-    session: payload.session,
-    attendeeRows: [attendeeRow],
+}): Promise<void> => {
+  logEvent("info", "video.leave", {
+    meetingId: payload.meetingId,
+    user: payload.session.effectiveEmail,
   });
-
-  await writeAuditLog({
-    actorEmail: payload.session.effectiveEmail,
-    actorRole: payload.session.effectiveRole,
-    action: "video.meeting.leave",
-    targetType: "meeting",
-    targetId: meetingRecord.id,
-    details: {
-      caseId: meetingRecord.caseId,
-      attendeeId: attendeeRow.attendeeId,
-    },
-  });
-
-  return { ok: true };
 };

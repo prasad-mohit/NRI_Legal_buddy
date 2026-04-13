@@ -1,1090 +1,653 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import {
+  BookOpen,
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
   FileText,
+  Globe2,
+  LayoutDashboard,
+  LogOut,
+  Scale,
+  Shield,
   ShieldCheck,
+  Ticket,
   UploadCloud,
   UserCheck,
   UserPlus,
+  Users,
   Video,
 } from "lucide-react";
 
-const cardShell =
-  "rounded-[24px] border border-slate-200 bg-white shadow-[0_20px_50px_rgba(15,23,42,0.08)]";
+// ── Styles ──────────────────────────────────────────────────────────────────
+const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
+const inputCls =
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+const btnPrimary =
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition";
+const btnOutline =
+  "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-500 transition";
+const btnSmall =
+  "inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-slate-400 transition";
 
-interface AdminUser {
-  id: string;
-  email: string;
-  displayName: string;
-  role: string;
-  createdAt: string;
-}
-
+// ── Types ────────────────────────────────────────────────────────────────────
+interface AdminUser { id: string; email: string; displayName: string; role: string; createdAt: string }
 interface CaseRow {
-  id: string;
-  serviceId: string;
-  stage: string;
-  caseStatus?: string | null;
-  stageStatus?: string | null;
-  platformFeePaid: number;
-  paymentStatus: string;
-  caseDetails: string | null;
-  caseSummary: string | null;
-  caseManagerMeta: string | null;
-  practitionerMeta: string | null;
-  documentCount: number;
-  videoSlot: string | null;
-  updatedAt: string;
-  fullName: string;
-  email: string;
-  country: string;
-  bankInstructions?: string | null;
-  paymentPlan?: string | null;
-  terms?: string | null;
+  id: string; serviceId: string; stage: string;
+  caseStatus?: string | null; stageStatus?: string | null;
+  platformFeePaid: number; paymentStatus: string;
+  caseDetails: string | null; caseSummary: string | null;
+  caseManagerMeta: string | null; practitionerMeta: string | null;
+  documentCount: number; videoSlot: string | null; updatedAt: string;
+  fullName: string; email: string; country: string;
+  bankInstructions?: string | null; paymentPlan?: string | null; terms?: string | null;
 }
+interface CaseManagerRow { id: string; name: string; timezone: string; specialization: string; weeklyLoad: number }
+interface PractitionerRow { id: string; name: string; bar: string; focus: string }
+interface ClientRow { id: string; fullName: string; email: string; country: string; createdAt: string }
+interface DocumentRow { id: string; caseId: string; name: string; type: string; status: string; summary: string; uploadedAt: string }
+interface VideoRow { id: string; caseId: string; scheduledAt: string; link: string; createdAt: string }
+interface BlogRow { id: string; slug: string; title: string; excerpt?: string | null; content: string; authorEmail: string; published: boolean; createdAt: string }
+interface SessionRow { id: string; subjectEmail: string; role: string; actingAsEmail?: string | null; actingAsRole?: string | null; expiresAt: string; revokedAt: string | null; createdAt: string }
+type CaseTab = "SUBMITTED" | "UNDER_REVIEW" | "AWAITING_CLIENT_APPROVAL" | "PAYMENT_PENDING" | "IN_PROGRESS";
+type AdminTab = "dashboard" | "cases" | "clients" | "roster" | "sessions" | "users" | "blogs" | "docs" | "videos";
 
-interface CaseManagerRow {
-  id: string;
-  name: string;
-  timezone: string;
-  specialization: string;
-  weeklyLoad: number;
-}
-
-interface PractitionerRow {
-  id: string;
-  name: string;
-  bar: string;
-  focus: string;
-}
-
-interface ClientRow {
-  id: string;
-  fullName: string;
-  email: string;
-  country: string;
-  createdAt: string;
-}
-
-interface DocumentRow {
-  id: string;
-  caseId: string;
-  name: string;
-  type: string;
-  status: string;
-  summary: string;
-  uploadedAt: string;
-}
-
-interface VideoRow {
-  id: string;
-  caseId: string;
-  scheduledAt: string;
-  link: string;
-  createdAt: string;
-}
-
-interface BlogRow {
-  id: string;
-  slug: string;
-  title: string;
-  excerpt?: string | null;
-  content: string;
-  authorEmail: string;
-  published: boolean;
-  createdAt: string;
-}
-
-interface SessionRow {
-  id: string;
-  subjectEmail: string;
-  role: string;
-  actingAsEmail?: string | null;
-  actingAsRole?: string | null;
-  expiresAt: string;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
-type CaseTab =
-  | "SUBMITTED"
-  | "UNDER_REVIEW"
-  | "AWAITING_CLIENT_APPROVAL"
-  | "PAYMENT_PENDING"
-  | "IN_PROGRESS";
-
+// ── Root ─────────────────────────────────────────────────────────────────────
 export default function AdminConsole() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [session, setSession] = useState<{ email: string; displayName: string; role: string } | null>(
-    null
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [session, setSession] = useState<{ email: string; displayName: string; role: string } | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [tab, setTab] = useState<AdminTab>("dashboard");
+
   const [cases, setCases] = useState<CaseRow[]>([]);
-  const [caseTab, setCaseTab] = useState<CaseTab>("SUBMITTED");
   const [clients, setClients] = useState<ClientRow[]>([]);
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [videos, setVideos] = useState<VideoRow[]>([]);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [sessionCounts, setSessionCounts] = useState<{ active: number; total: number }>({
-    active: 0,
-    total: 0,
-  });
+  const [sessionCounts, setSessionCounts] = useState({ active: 0, total: 0 });
   const [blogs, setBlogs] = useState<BlogRow[]>([]);
-  const [blogDraft, setBlogDraft] = useState({
-    title: "Announcing NRI Desk Expansion",
-    slug: "",
-    excerpt: "Cross-border legal support just got wider.",
-    content: "Write your blog content here...",
-    published: true,
-  });
-  const [paymentDrafts, setPaymentDrafts] = useState<
-    Record<string, { bankInstructions?: string; paymentPlan?: string; terms?: string }>
-  >({});
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [managers, setManagers] = useState<CaseManagerRow[]>([]);
   const [practitioners, setPractitioners] = useState<PractitionerRow[]>([]);
-  const [assignmentDrafts, setAssignmentDrafts] = useState<
-    Record<string, { managerId?: string; practitionerId?: string }>
-  >({});
-  const [creating, setCreating] = useState(false);
-  const [rosterLoading, setRosterLoading] = useState(false);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [newUser, setNewUser] = useState({
-    email: "admin-secondary@nri-law-buddy.com",
-    displayName: "Compliance Lead",
-    role: "admin",
-    password: "ChangeMe123!",
-  });
-  const [rosterPayload, setRosterPayload] = useState(
-    JSON.stringify(
-      {
-        managers: [
-          {
-            id: "mgr-001",
-            name: "Rhea Mehta",
-            timezone: "IST",
-            specialization: "Property & Title",
-            weeklyLoad: 8,
-          },
-        ],
-        practitioners: [
-          {
-            id: "prc-001",
-            name: "Adv. Vikram Rao",
-            bar: "Bombay High Court",
-            focus: "Property litigation",
-          },
-        ],
-      },
-      null,
-      2
-    )
-  );
 
-  const loadUsers = async () => {
-    const res = await fetch("/api/admin/users", { credentials: "include" });
-    if (!res.ok) {
-      console.error("[debug][admin] loadUsers failed", res.status);
-      return;
+  const [caseTab, setCaseTab] = useState<CaseTab>("SUBMITTED");
+  const [assignmentDrafts, setAssignmentDrafts] = useState<Record<string, { managerId?: string; practitionerId?: string }>>({});
+  const [paymentDrafts, setPaymentDrafts] = useState<Record<string, { bankInstructions?: string; paymentPlan?: string; terms?: string }>>({});
+
+  const [rosterPayload, setRosterPayload] = useState(JSON.stringify({ managers: [{ id: "mgr-001", name: "Rhea Mehta", timezone: "IST", specialization: "Property & Title", weeklyLoad: 8 }], practitioners: [{ id: "prc-001", name: "Adv. Vikram Rao", bar: "Bombay High Court", focus: "Property litigation" }] }, null, 2));
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [newUser, setNewUser] = useState({ email: "", displayName: "", role: "admin", password: "" });
+  const [blogDraft, setBlogDraft] = useState({ title: "", slug: "", excerpt: "", content: "", published: true });
+  const [creating, setCreating] = useState(false);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+
+  const parseMeta = <T,>(v: string | null) => { if (!v) return null; try { return JSON.parse(v) as T; } catch { return null; } };
+
+  const api = async (path: string, opts?: RequestInit) =>
+    fetch(path, { credentials: "include", ...opts });
+
+  const loadAll = async () => {
+    const [casesR, clientsR, docsR, vidsR, sessR, blogsR] = await Promise.all([
+      api("/api/admin/cases"),
+      api("/api/admin/clients"),
+      api("/api/admin/documents"),
+      api("/api/admin/videos"),
+      api("/api/admin/sessions"),
+      api("/api/admin/blogs"),
+    ]);
+    if (casesR.ok) setCases(((await casesR.json()) as { cases: CaseRow[] }).cases ?? []);
+    if (clientsR.ok) setClients(((await clientsR.json()) as { clients: ClientRow[] }).clients ?? []);
+    if (docsR.ok) setDocuments(((await docsR.json()) as { documents: DocumentRow[] }).documents ?? []);
+    if (vidsR.ok) setVideos(((await vidsR.json()) as { videos: VideoRow[] }).videos ?? []);
+    if (sessR.ok) {
+      const d = (await sessR.json()) as { sessions: SessionRow[]; activeCount: number; totalCount: number };
+      setSessions(d.sessions ?? []); setSessionCounts({ active: d.activeCount ?? 0, total: d.totalCount ?? 0 });
     }
-    const data = (await res.json()) as { users: AdminUser[] };
-    console.log("[debug][admin] users fetched", data.users?.length ?? 0);
-    setUsers(data.users ?? []);
+    if (blogsR.ok) setBlogs(((await blogsR.json()) as { blogs: BlogRow[] }).blogs ?? []);
   };
 
-  const loadDashboard = async () => {
-    const [casesRes, clientsRes, docsRes, videosRes, sessionsRes, blogsRes] = await Promise.all([
-      fetch("/api/admin/cases", { credentials: "include" }),
-      fetch("/api/admin/clients", { credentials: "include" }),
-      fetch("/api/admin/documents", { credentials: "include" }),
-      fetch("/api/admin/videos", { credentials: "include" }),
-      fetch("/api/admin/sessions", { credentials: "include" }),
-      fetch("/api/admin/blogs", { credentials: "include" }),
-    ]);
-
-    if (casesRes.ok) {
-      const data = (await casesRes.json()) as { cases: CaseRow[] };
-      console.log("[debug][admin] cases fetched", data.cases?.length ?? 0);
-      setCases(data.cases ?? []);
-    } else {
-      console.error("[debug][admin] cases fetch failed", casesRes.status);
-    }
-    if (clientsRes.ok) {
-      const data = (await clientsRes.json()) as { clients: ClientRow[] };
-      console.log("[debug][admin] clients fetched", data.clients?.length ?? 0);
-      setClients(data.clients ?? []);
-    } else {
-      console.error("[debug][admin] clients fetch failed", clientsRes.status);
-    }
-    if (docsRes.ok) {
-      const data = (await docsRes.json()) as { documents: DocumentRow[] };
-      console.log("[debug][admin] documents fetched", data.documents?.length ?? 0);
-      setDocuments(data.documents ?? []);
-    } else {
-      console.error("[debug][admin] documents fetch failed", docsRes.status);
-    }
-    if (videosRes.ok) {
-      const data = (await videosRes.json()) as { videos: VideoRow[] };
-      console.log("[debug][admin] videos fetched", data.videos?.length ?? 0);
-      setVideos(data.videos ?? []);
-    } else {
-      console.error("[debug][admin] videos fetch failed", videosRes.status);
-    }
-    if (sessionsRes.ok) {
-      const data = (await sessionsRes.json()) as {
-        sessions: SessionRow[];
-        activeCount: number;
-        totalCount: number;
-      };
-      console.log("[debug][admin] sessions fetched", data.sessions?.length ?? 0);
-      setSessions(data.sessions ?? []);
-      setSessionCounts({ active: data.activeCount ?? 0, total: data.totalCount ?? 0 });
-    } else {
-      console.error("[debug][admin] sessions fetch failed", sessionsRes.status);
-    }
-    if (blogsRes.ok) {
-      const data = (await blogsRes.json()) as { blogs: BlogRow[] };
-      console.log("[debug][admin] blogs fetched", data.blogs?.length ?? 0);
-      setBlogs(data.blogs ?? []);
-    } else {
-      console.error("[debug][admin] blogs fetch failed", blogsRes.status);
-    }
+  const loadUsers = async () => {
+    const r = await api("/api/admin/users");
+    if (r.ok) setUsers(((await r.json()) as { users: AdminUser[] }).users ?? []);
   };
 
   const loadRoster = async () => {
     setRosterLoading(true);
-    const res = await fetch("/api/admin/roster");
-    if (res.ok) {
-      const data = (await res.json()) as { managers: CaseManagerRow[]; practitioners: PractitionerRow[] };
-      console.log("[debug][admin] roster fetched", {
-        managers: data.managers?.length ?? 0,
-        practitioners: data.practitioners?.length ?? 0,
-      });
-      setManagers(data.managers ?? []);
-      setPractitioners(data.practitioners ?? []);
-    } else {
-      console.error("[debug][admin] roster fetch failed", res.status);
-    }
+    const r = await api("/api/admin/roster");
+    if (r.ok) { const d = (await r.json()) as { managers: CaseManagerRow[]; practitioners: PractitionerRow[] }; setManagers(d.managers ?? []); setPractitioners(d.practitioners ?? []); }
     setRosterLoading(false);
   };
 
-  const seedRoster = async () => {
-    setRosterLoading(true);
-    await fetch("/api/admin/roster/seed", { method: "POST" });
-    await loadRoster();
-    setActionMessage("Roster seeded with sample assignments.");
-    setRosterLoading(false);
-  };
-
-  const handleRosterUpload = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setRosterLoading(true);
-    setActionMessage(null);
-    try {
-      const payload = JSON.parse(rosterPayload) as {
-        managers?: CaseManagerRow[];
-        practitioners?: PractitionerRow[];
-      };
-      const res = await fetch("/api/admin/roster", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const message = await res.text();
-        setActionMessage(message || "Roster upload failed");
-      } else {
-        setActionMessage("Roster updated.");
-        await loadRoster();
-      }
-    } catch (error) {
-      setActionMessage("Invalid JSON payload.");
-    }
-    setRosterLoading(false);
-  };
-
-  const handleApprovePayment = async (caseId: string) => {
-    await fetch("/api/admin/payments/approve", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caseId }),
-    });
-    await loadDashboard();
-  };
-
-  const handleRevokeSession = async (sessionId: string) => {
-    await fetch("/api/admin/sessions", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, action: "revoke" }),
-    });
-    await loadDashboard();
-  };
-
-  const handleAssignmentSave = async (row: CaseRow) => {
-    const draft = assignmentDrafts[row.id] ?? {};
-    const manager = managers.find((item) => item.id === draft.managerId);
-    const practitioner = practitioners.find((item) => item.id === draft.practitionerId);
-
-    await fetch("/api/admin/assignments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        caseId: row.id,
-        caseManager: manager,
-        practitioner,
-      }),
-    });
-    await loadDashboard();
-  };
-
-  const parseMeta = <T,>(value: string | null) => {
-    if (!value) return null;
-    try {
-      return JSON.parse(value) as T;
-    } catch {
-      return null;
-    }
-  };
-
-  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    const res = await fetch("/api/admin/auth/login", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { message?: string };
-      setError(data.message || "Login failed");
-      return;
-    }
-    const data = (await res.json()) as { session: { email: string; displayName: string; role: string } };
-    setSession(data.session);
-  };
-
-  const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setCreating(true);
-    setError(null);
-    const res = await fetch("/api/admin/users", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newUser),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { message?: string };
-      setError(data.message || "Failed to create admin");
-      setCreating(false);
-      return;
-    }
-    await loadUsers();
-    setCreating(false);
-  };
-
-  const handleCreateBlog = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const res = await fetch("/api/admin/blogs", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(blogDraft),
-    });
-    if (!res.ok) {
-      const msg = await res.text();
-      setActionMessage(msg || "Failed to create blog");
-      return;
-    }
-    setActionMessage("Blog saved.");
-    setBlogDraft((prev) => ({ ...prev, slug: "", content: prev.content }));
-    await loadDashboard();
-  };
-
-  const handleSavePaymentPlan = async (row: CaseRow) => {
-    const draft = paymentDrafts[row.id] ?? {};
-    await fetch(`/api/cases/${row.id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bankInstructions: draft.bankInstructions ?? row.bankInstructions,
-        paymentPlan: draft.paymentPlan ?? row.paymentPlan,
-        terms: draft.terms ?? row.terms,
-      }),
-    });
-    await loadDashboard();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoginError(null);
+    const r = await api("/api/admin/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword }) });
+    if (!r.ok) { setLoginError(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Login failed"); return; }
+    const d = (await r.json()) as { session: { email: string; displayName: string; role: string } };
+    setSession(d.session);
   };
 
   const handleSignOut = async () => {
+    await api("/api/auth/logout", { method: "POST" }).catch(() => null);
+    setSession(null); setCases([]); setClients([]); setDocuments([]); setVideos([]); setUsers([]);
+  };
+
+  const handleApprovePayment = async (caseId: string) => {
+    await api("/api/admin/payments/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId }) });
+    await loadAll(); setActionMsg("Payment approved.");
+  };
+
+  const handleAssignment = async (row: CaseRow) => {
+    const draft = assignmentDrafts[row.id] ?? {};
+    await api("/api/admin/assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId: row.id, caseManager: managers.find((m) => m.id === draft.managerId), practitioner: practitioners.find((p) => p.id === draft.practitionerId) }) });
+    await loadAll(); setActionMsg("Assignment saved.");
+  };
+
+  const handleRevokeSession = async (id: string) => {
+    await api("/api/admin/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: id, action: "revoke" }) });
+    await loadAll();
+  };
+
+  const handleSavePaymentPlan = async (row: CaseRow) => {
+    const d = paymentDrafts[row.id] ?? {};
+    await api(`/api/cases/${row.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bankInstructions: d.bankInstructions ?? row.bankInstructions, paymentPlan: d.paymentPlan ?? row.paymentPlan, terms: d.terms ?? row.terms }) });
+    await loadAll(); setActionMsg("Payment plan saved.");
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault(); setCreating(true);
+    const r = await api("/api/admin/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newUser) });
+    if (!r.ok) { setActionMsg(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Failed"); setCreating(false); return; }
+    await loadUsers(); setCreating(false); setActionMsg("Admin user created."); setNewUser({ email: "", displayName: "", role: "admin", password: "" });
+  };
+
+  const handleRosterUpload = async (e: React.FormEvent) => {
+    e.preventDefault(); setRosterLoading(true); setActionMsg(null);
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    } catch {
-      // ignore and proceed with local reset
-    }
-    setSession(null);
-    setCases([]);
-    setClients([]);
-    setDocuments([]);
-    setVideos([]);
-    setUsers([]);
+      const payload = JSON.parse(rosterPayload) as object;
+      const r = await api("/api/admin/roster", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      setActionMsg(r.ok ? "Roster updated." : await r.text()); if (r.ok) await loadRoster();
+    } catch { setActionMsg("Invalid JSON."); }
+    setRosterLoading(false);
+  };
+
+  const seedRoster = async () => { setRosterLoading(true); await api("/api/admin/roster/seed", { method: "POST" }); await loadRoster(); setActionMsg("Roster seeded."); setRosterLoading(false); };
+
+  const handleCreateBlog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const r = await api("/api/admin/blogs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(blogDraft) });
+    setActionMsg(r.ok ? "Blog saved." : await r.text()); if (r.ok) { await loadAll(); setBlogDraft({ title: "", slug: "", excerpt: "", content: "", published: true }); }
   };
 
   useEffect(() => {
-    if (session) {
-      void loadUsers();
-      void loadDashboard();
-      void loadRoster();
-    }
+    if (session) { void loadAll(); void loadUsers(); void loadRoster(); }
   }, [session]);
 
   useEffect(() => {
     const hydrate = async () => {
-      const res = await fetch("/api/auth/session", { credentials: "include" });
-      if (!res.ok) return;
-      const data = (await res.json()) as {
-        user: { fullName: string; email: string; role: string } | null;
-      };
-      if (!data.user) return;
-      if (data.user.role !== "admin" && data.user.role !== "super-admin") return;
-      setSession({
-        email: data.user.email,
-        displayName: data.user.fullName,
-        role: data.user.role,
-      });
+      const r = await fetch("/api/auth/session", { credentials: "include" });
+      if (!r.ok) return;
+      const d = (await r.json()) as { user: { fullName: string; email: string; role: string } | null };
+      if (!d.user || (d.user.role !== "admin" && d.user.role !== "super-admin")) return;
+      setSession({ email: d.user.email, displayName: d.user.fullName, role: d.user.role });
     };
     void hydrate();
   }, []);
 
-  const tabCases = cases.filter((row) => {
-    const status = (row.caseStatus ?? "SUBMITTED") as CaseTab;
-    if (caseTab === "IN_PROGRESS") return status === "IN_PROGRESS";
-    if (caseTab === "PAYMENT_PENDING") return status === "PAYMENT_PENDING";
-    if (caseTab === "AWAITING_CLIENT_APPROVAL") return status === "AWAITING_CLIENT_APPROVAL";
-    if (caseTab === "UNDER_REVIEW") return status === "UNDER_REVIEW";
-    return status === "SUBMITTED";
+  const tabCases = cases.filter((r) => {
+    const s = (r.caseStatus ?? "SUBMITTED") as CaseTab;
+    return s === caseTab;
   });
 
-  return (
-    <div className="min-h-screen bg-[#f8fafc] px-6 py-10 text-slate-900">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <header className={clsx(cardShell, "p-6")}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="h-6 w-6 text-blue-600" />
-              <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Admin Console</p>
-                <h1 className="text-2xl font-semibold">NRI Law Buddy Control Center</h1>
-              </div>
+  const navItems: { id: AdminTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: "dashboard", label: "Overview", icon: <LayoutDashboard className="h-4 w-4" /> },
+    { id: "cases", label: "Cases", icon: <ClipboardList className="h-4 w-4" />, badge: cases.length },
+    { id: "clients", label: "Clients", icon: <Users className="h-4 w-4" />, badge: clients.length },
+    { id: "roster", label: "Roster", icon: <UserCheck className="h-4 w-4" /> },
+    { id: "sessions", label: "Sessions", icon: <Shield className="h-4 w-4" />, badge: sessionCounts.active },
+    { id: "users", label: "Admin Users", icon: <UserPlus className="h-4 w-4" /> },
+    { id: "blogs", label: "Blogs", icon: <BookOpen className="h-4 w-4" /> },
+    { id: "docs", label: "Documents", icon: <FileText className="h-4 w-4" />, badge: documents.length },
+    { id: "videos", label: "Meetings", icon: <Video className="h-4 w-4" />, badge: videos.length },
+  ];
+
+  if (!session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+        <form onSubmit={handleLogin} className="w-full max-w-sm space-y-5 rounded-2xl bg-white p-8 shadow-lg border border-slate-200">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
+              <ShieldCheck className="h-5 w-5" />
             </div>
-            {session && (
-              <button
-                type="button"
-                onClick={() => void handleSignOut()}
-                className="rounded-full border border-slate-900 px-4 py-2 text-sm font-semibold text-slate-900"
-              >
-                Sign out
-              </button>
-            )}
+            <div>
+              <p className="text-base font-bold text-slate-900">NRI Law Buddy</p>
+              <p className="text-xs text-slate-400">Admin Console</p>
+            </div>
           </div>
+          <label className="block text-sm font-medium text-slate-700">
+            Email
+            <input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className={clsx("mt-1", inputCls)} required />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">
+            Password
+            <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className={clsx("mt-1", inputCls)} required />
+          </label>
+          {loginError && <div className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{loginError}</div>}
+          <button type="submit" className={clsx("w-full", btnPrimary)}>Sign in to console</button>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
+      {/* Sidebar */}
+      <aside className="flex w-60 flex-shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="flex items-center gap-2.5 border-b border-slate-100 px-5 py-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white">
+            <Scale className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-900">Admin Console</p>
+            <p className="text-[11px] text-slate-400">NRI Law Buddy</p>
+          </div>
+        </div>
+
+        <div className="border-b border-slate-100 px-5 py-4">
+          <p className="text-sm font-semibold text-slate-900 truncate">{session.displayName}</p>
+          <p className="text-xs text-slate-400 truncate">{session.email}</p>
+          <span className="mt-1.5 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 uppercase tracking-wide">{session.role}</span>
+        </div>
+
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          {navItems.map((item) => (
+            <button key={item.id} type="button" onClick={() => setTab(item.id)}
+              className={clsx("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                tab === item.id ? "bg-indigo-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              )}>
+              {item.icon}
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className={clsx("rounded-full px-2 py-0.5 text-xs font-bold",
+                  tab === item.id ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600")}>
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="border-t border-slate-100 px-4 py-4">
+          <button type="button" onClick={() => void handleSignOut()}
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition">
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <main className="flex flex-1 flex-col overflow-hidden">
+        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+          <h1 className="text-lg font-bold text-slate-900">{navItems.find((n) => n.id === tab)?.label}</h1>
+          {actionMsg && (
+            <div className="rounded-xl bg-emerald-50 px-4 py-2 text-sm text-emerald-700 border border-emerald-200">
+              {actionMsg}
+              <button type="button" onClick={() => setActionMsg(null)} className="ml-3 text-xs text-emerald-500 underline">dismiss</button>
+            </div>
+          )}
         </header>
 
-        {!session ? (
-          <form onSubmit={handleLogin} className={clsx(cardShell, "space-y-4 p-6")}
-          >
-            <h2 className="text-lg font-semibold">Administrator sign-in</h2>
-            <label className="block text-sm text-slate-600">
-              Email
-              <input
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </label>
-            <label className="block text-sm text-slate-600">
-              Password
-              <input
-                type="password"
-                className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            {error && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                {error}
-              </div>
-            )}
-            <button
-              type="submit"
-              className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-50"
-            >
-              Sign in
-            </button>
-          </form>
-        ) : (
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className={clsx(cardShell, "p-4")}>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Active cases</p>
-                <p className="text-2xl font-semibold text-slate-900">{cases.length}</p>
-                <p className="text-xs text-slate-500">Includes approved payments</p>
-              </div>
-              <div className={clsx(cardShell, "p-4")}>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Active sessions</p>
-                <p className="text-2xl font-semibold text-slate-900">
-                  {sessionCounts.active} / {sessionCounts.total}
-                </p>
-                <p className="text-xs text-slate-500">Non-expired & not revoked</p>
-              </div>
-              <div className={clsx(cardShell, "p-4")}>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Registered users</p>
-                <p className="text-2xl font-semibold text-slate-900">{clients.length}</p>
-                <p className="text-xs text-slate-500">Client directory size</p>
-              </div>
-            </div>
+        <div className="flex-1 overflow-y-auto p-6">
 
-            <div className="grid gap-6 lg:grid-cols-3">
-            <section className={clsx(cardShell, "p-6 lg:col-span-2")}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Active cases</h2>
-                  <p className="text-sm text-slate-500">Latest engagement activity</p>
-                </div>
-                <ClipboardList className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+          {/* DASHBOARD */}
+          {tab === "dashboard" && (
+            <div className="max-w-4xl space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {[
-                  { key: "SUBMITTED", label: "New Cases" },
-                  { key: "UNDER_REVIEW", label: "Under Review" },
-                  { key: "AWAITING_CLIENT_APPROVAL", label: "Awaiting Client Approval" },
-                  { key: "PAYMENT_PENDING", label: "Payment Queue" },
-                  { key: "IN_PROGRESS", label: "Active" },
-                ].map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setCaseTab(tab.key as CaseTab)}
-                    className={clsx(
-                      "rounded-full px-3 py-1 text-xs font-semibold",
-                      caseTab === tab.key
-                        ? "bg-slate-900 text-amber-50"
-                        : "border border-slate-200 text-slate-700"
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4 space-y-3">
-                {tabCases.length === 0 && (
-                  <p className="text-sm text-slate-500">No cases in this lane.</p>
-                )}
-                {tabCases.map((row) => (
-                  <div key={row.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                    {(() => {
-                      const managerMeta = parseMeta<CaseManagerRow>(row.caseManagerMeta);
-                      const practitionerMeta = parseMeta<PractitionerRow>(row.practitionerMeta);
-                      const draft = assignmentDrafts[row.id] ?? {};
-                      const selectedManagerId = draft.managerId ?? managerMeta?.id ?? "";
-                      const selectedPractitionerId = draft.practitionerId ?? practitionerMeta?.id ?? "";
-                      return (
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-semibold">{row.fullName}</p>
-                              <p className="text-slate-500">
-                                {row.email} • {row.country}
-                              </p>
-                            </div>
-                            <div className="space-y-2 text-right">
-                              <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-900">
-                                {(row.caseStatus ?? "SUBMITTED").replace(/_/g, " ")}
-                              </span>
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-                                {row.stage}
-                              </span>
-                              <span
-                                className={clsx(
-                                  "block rounded-full px-3 py-1 text-xs",
-                                  row.paymentStatus === "approved"
-                                    ? "bg-emerald-100 text-emerald-800"
-                                    : "bg-amber-100 text-amber-800"
-                                )}
-                              >
-                                {row.paymentStatus === "approved" ? "Payment approved" : "Payment pending"}
-                              </span>
-                            </div>
-                          </div>
-                          <p className="text-xs text-slate-400">
-                            Service: {row.serviceId} • Docs: {row.documentCount} • Video: {row.videoSlot ?? "Pending"}
-                          </p>
-                        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
-                          <p className="font-semibold text-slate-900">Case summary</p>
-                          <p>{row.caseSummary || "Pending intake summary."}</p>
-                          {row.caseDetails && (
-                            <p className="mt-2 text-slate-500">Details: {row.caseDetails}</p>
-                          )}
-                          <div className="mt-3 space-y-2">
-                            <label className="block text-[11px] text-slate-500">
-                              Bank instructions
-                              <textarea
-                                className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                                rows={2}
-                                defaultValue={row.bankInstructions ?? ""}
-                                onChange={(e) =>
-                                  setPaymentDrafts((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...(prev[row.id] ?? {}), bankInstructions: e.target.value },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label className="block text-[11px] text-slate-500">
-                              Payment plan
-                              <textarea
-                                className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                                rows={2}
-                                defaultValue={row.paymentPlan ?? ""}
-                                onChange={(e) =>
-                                  setPaymentDrafts((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...(prev[row.id] ?? {}), paymentPlan: e.target.value },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label className="block text-[11px] text-slate-500">
-                              Terms
-                              <textarea
-                                className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                                rows={2}
-                                defaultValue={row.terms ?? ""}
-                                onChange={(e) =>
-                                  setPaymentDrafts((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...(prev[row.id] ?? {}), terms: e.target.value },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <button
-                              type="button"
-                              onClick={() => void handleSavePaymentPlan(row)}
-                              className="inline-flex items-center gap-2 rounded-2xl border border-slate-900/20 px-3 py-2 text-[11px] font-semibold text-slate-900"
-                            >
-                              Save payment instructions
-                            </button>
-                          </div>
-                        </div>
-                          {row.paymentStatus !== "approved" && (
-                            <button
-                              type="button"
-                              onClick={() => void handleApprovePayment(row.id)}
-                              className="inline-flex items-center gap-2 rounded-2xl border border-slate-900/20 px-3 py-2 text-xs font-semibold text-slate-900"
-                            >
-                              <CheckCircle2 className="h-4 w-4" /> Approve payment
-                            </button>
-                          )}
-                          <div className="grid gap-2 lg:grid-cols-2">
-                            <label className="text-xs text-slate-500">
-                              Case manager
-                              <select
-                                className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-xs"
-                                value={selectedManagerId}
-                                onChange={(event) =>
-                                  setAssignmentDrafts((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...prev[row.id], managerId: event.target.value },
-                                  }))
-                                }
-                              >
-                                <option value="">Select manager</option>
-                                {managers.map((manager) => (
-                                  <option key={manager.id} value={manager.id}>
-                                    {manager.name} • {manager.specialization}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label className="text-xs text-slate-500">
-                              Practitioner
-                              <select
-                                className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2 text-xs"
-                                value={selectedPractitionerId}
-                                onChange={(event) =>
-                                  setAssignmentDrafts((prev) => ({
-                                    ...prev,
-                                    [row.id]: { ...prev[row.id], practitionerId: event.target.value },
-                                  }))
-                                }
-                              >
-                                <option value="">Select practitioner</option>
-                                {practitioners.map((practitioner) => (
-                                  <option key={practitioner.id} value={practitioner.id}>
-                                    {practitioner.name} • {practitioner.focus}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void handleAssignmentSave(row)}
-                            className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-xs font-semibold text-amber-50"
-                          >
-                            <ClipboardCheck className="h-4 w-4" /> Save assignment
-                          </button>
-                        </div>
-                      );
-                    })()}
+                  { label: "Total cases", value: cases.length, icon: <ClipboardList className="h-5 w-5 text-indigo-600" /> },
+                  { label: "Active sessions", value: sessionCounts.active, icon: <Shield className="h-5 w-5 text-emerald-600" /> },
+                  { label: "Registered clients", value: clients.length, icon: <Users className="h-5 w-5 text-blue-600" /> },
+                  { label: "Documents", value: documents.length, icon: <FileText className="h-5 w-5 text-amber-600" /> },
+                ].map((s) => (
+                  <div key={s.label} className={clsx(card, "p-5")}>
+                    <div className="flex items-center justify-between mb-2">{s.icon}<span className="text-3xl font-bold text-slate-900">{s.value}</span></div>
+                    <p className="text-sm text-slate-500">{s.label}</p>
                   </div>
                 ))}
               </div>
-            </section>
-            <section className={clsx(cardShell, "p-6")}
-            >
-              <div className="flex items-center gap-2">
-                <UserPlus className="h-5 w-5 text-blue-600" />
-                <h2 className="text-lg font-semibold">Create admin user</h2>
-              </div>
-              <form onSubmit={handleCreate} className="mt-4 space-y-3">
-                <label className="block text-sm text-slate-600">
-                  Display name
-                  <input
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                    value={newUser.displayName}
-                    onChange={(event) =>
-                      setNewUser((prev) => ({ ...prev, displayName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="block text-sm text-slate-600">
-                  Email
-                  <input
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                    value={newUser.email}
-                    onChange={(event) =>
-                      setNewUser((prev) => ({ ...prev, email: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="block text-sm text-slate-600">
-                  Role
-                  <input
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                    value={newUser.role}
-                    onChange={(event) =>
-                      setNewUser((prev) => ({ ...prev, role: event.target.value }))
-                    }
-                  />
-                </label>
-                <label className="block text-sm text-slate-600">
-                  Password
-                  <input
-                    type="password"
-                    className="mt-2 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                    value={newUser.password}
-                    onChange={(event) =>
-                      setNewUser((prev) => ({ ...prev, password: event.target.value }))
-                    }
-                  />
-                </label>
-                {error && (
-                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                    {error}
-                  </div>
-                )}
-                <button
-                  type="submit"
-                  disabled={creating}
-                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-blue-50 disabled:opacity-50"
-                >
-                  {creating ? "Creating..." : "Create admin"}
-                </button>
-              </form>
-            </section>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-3">
-            <section className={clsx(cardShell, "p-6")}
-            >
-              <h2 className="text-lg font-semibold">Client directory</h2>
-              <div className="mt-4 space-y-3">
-                {clients.map((client) => (
-                  <div key={client.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                    <p className="font-semibold">{client.fullName}</p>
-                    <p className="text-slate-500">{client.email}</p>
-                    <p className="text-xs text-slate-400">{client.country}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-            <section className={clsx(cardShell, "p-6")}
-            >
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                <h2 className="text-lg font-semibold">Vault documents</h2>
-              </div>
-              <div className="mt-4 space-y-3">
-                {documents.map((doc) => (
-                  <div key={doc.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                    <p className="font-semibold">{doc.name}</p>
-                    <p className="text-xs text-slate-500">{doc.type} • {doc.status}</p>
-                    <p className="text-xs text-slate-400">Case {doc.caseId}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-            <section className={clsx(cardShell, "p-6")}
-            >
-              <div className="flex items-center gap-2">
-                <Video className="h-5 w-5 text-blue-600" />
-                <h2 className="text-lg font-semibold">Video schedule</h2>
-              </div>
-              <div className="mt-4 space-y-3">
-                {videos.map((video) => (
-                  <div key={video.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                    <p className="font-semibold">{video.scheduledAt}</p>
-                    <p className="text-xs text-slate-500">Case {video.caseId}</p>
-                    <a className="text-xs text-blue-600 underline" href={video.link}>
-                      Join link
-                    </a>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <section className={clsx(cardShell, "space-y-4 p-6")}
-          >
-            <div className="flex items-center gap-2">
-              <UploadCloud className="h-5 w-5 text-blue-600" />
-              <h2 className="text-lg font-semibold">Roster management</h2>
-            </div>
-            <p className="text-sm text-slate-500">
-              Bulk upload case managers and practitioners or seed the sample roster.
-            </p>
-            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-              <form onSubmit={handleRosterUpload} className="space-y-3">
-                <textarea
-                  rows={8}
-                  className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-xs"
-                  value={rosterPayload}
-                  onChange={(event) => setRosterPayload(event.target.value)}
-                />
-                {actionMessage && (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                    {actionMessage}
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="submit"
-                    disabled={rosterLoading}
-                    className="rounded-2xl bg-slate-900 px-4 py-2 text-xs font-semibold text-amber-50 disabled:opacity-50"
-                  >
-                    {rosterLoading ? "Uploading..." : "Upload roster"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void seedRoster()}
-                    className="rounded-2xl border border-slate-900/20 px-4 py-2 text-xs font-semibold text-slate-900"
-                  >
-                    Seed sample roster
-                  </button>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className={clsx(card, "p-5")}>
+                  <p className="text-sm font-semibold text-slate-900 mb-3">Recent cases</p>
+                  {cases.slice(0, 5).map((c) => (
+                    <div key={c.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 text-sm">
+                      <div>
+                        <p className="font-medium text-slate-900">{c.fullName}</p>
+                        <p className="text-xs text-slate-400">{c.serviceId} · {c.country}</p>
+                      </div>
+                      <span className={clsx("rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        c.paymentStatus === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                        {c.paymentStatus}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              </form>
-              <div className="space-y-3 text-xs text-slate-600">
-                <div className="rounded-2xl border border-slate-200 p-3">
-                  <p className="font-semibold text-slate-900">Case managers</p>
-                  <ul className="mt-2 space-y-1">
-                    {managers.map((manager) => (
-                      <li key={manager.id}>
-                        {manager.name} • {manager.specialization} • {manager.timezone}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border border-slate-200 p-3">
-                  <p className="font-semibold text-slate-900">Practitioners</p>
-                  <ul className="mt-2 space-y-1">
-                    {practitioners.map((practitioner) => (
-                      <li key={practitioner.id}>
-                        {practitioner.name} • {practitioner.focus}
-                      </li>
-                    ))}
-                  </ul>
+                <div className={clsx(card, "p-5")}>
+                  <p className="text-sm font-semibold text-slate-900 mb-3">Upcoming meetings</p>
+                  {videos.slice(0, 5).map((v) => (
+                    <div key={v.id} className="py-2 border-b border-slate-100 last:border-0 text-sm">
+                      <p className="font-medium text-slate-900">{v.scheduledAt}</p>
+                      <p className="text-xs text-slate-400">Case: {v.caseId}</p>
+                      <a href={v.link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 underline">Join</a>
+                    </div>
+                  ))}
+                  {videos.length === 0 && <p className="text-sm text-slate-400">No meetings scheduled.</p>}
                 </div>
               </div>
             </div>
-          </section>
+          )}
 
-            <section className={clsx(cardShell, "p-6")}
-            >
-              <h2 className="text-lg font-semibold">Admin users</h2>
-              <p className="text-sm text-slate-500">Signed in as {session.displayName}</p>
-              <div className="mt-4 space-y-3">
-                {users.map((user) => (
-                  <div key={user.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                    <p className="font-semibold">{user.displayName}</p>
-                    <p className="text-slate-500">{user.email}</p>
-                    <p className="text-xs text-slate-400">Role: {user.role}</p>
-                  </div>
+          {/* CASES */}
+          {tab === "cases" && (
+            <div className="max-w-5xl space-y-4">
+              <div className="flex flex-wrap gap-2">
+                {(["SUBMITTED", "UNDER_REVIEW", "AWAITING_CLIENT_APPROVAL", "PAYMENT_PENDING", "IN_PROGRESS"] as CaseTab[]).map((t) => (
+                  <button key={t} type="button" onClick={() => setCaseTab(t)}
+                    className={clsx("rounded-full px-4 py-1.5 text-xs font-semibold transition",
+                      caseTab === t ? "bg-indigo-600 text-white" : "border border-slate-200 text-slate-600 hover:border-indigo-400")}>
+                    {t.replace(/_/g, " ")} ({cases.filter((c) => (c.caseStatus ?? "SUBMITTED") === t).length})
+                  </button>
                 ))}
               </div>
-            </section>
-
-            <section className={clsx(cardShell, "p-6")}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Active sessions</h2>
-                  <p className="text-sm text-slate-500">Revoke to force re-login</p>
-                </div>
-                <ClipboardCheck className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="mt-4 space-y-3">
-                {sessions.length === 0 && (
-                  <p className="text-sm text-slate-500">No active sessions.</p>
-                )}
-                {sessions.map((s) => {
-                  const expired = new Date(s.expiresAt).getTime() <= Date.now();
-                  const revoked = Boolean(s.revokedAt);
-                  return (
-                    <div key={s.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold">{s.subjectEmail}</p>
-                          <p className="text-xs text-slate-500">
-                            Role: {s.role}
-                            {s.actingAsRole ? ` → acting as ${s.actingAsRole}` : ""}
-                          </p>
-                          <p className="text-xs text-slate-500">Expires: {s.expiresAt}</p>
-                        </div>
-                        <div className="space-y-1 text-right text-xs">
-                          <span
-                            className={clsx(
-                              "inline-flex rounded-full px-3 py-1",
-                              revoked || expired
-                                ? "bg-slate-200 text-slate-600"
-                                : "bg-emerald-100 text-emerald-700"
-                            )}
-                          >
-                            {revoked ? "Revoked" : expired ? "Expired" : "Active"}
-                          </span>
-                          {!revoked && !expired && (
-                            <button
-                              type="button"
-                              onClick={() => void handleRevokeSession(s.id)}
-                              className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-900/20 px-3 py-1 text-[11px] font-semibold text-slate-900"
-                            >
-                              End session
-                            </button>
-                          )}
-                        </div>
+              {tabCases.length === 0 && <p className="text-sm text-slate-400">No cases in this lane.</p>}
+              {tabCases.map((row) => {
+                const mgMeta = parseMeta<CaseManagerRow>(row.caseManagerMeta);
+                const prMeta = parseMeta<PractitionerRow>(row.practitionerMeta);
+                const draft = assignmentDrafts[row.id] ?? {};
+                return (
+                  <div key={row.id} className={clsx(card, "p-6 space-y-4")}>
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="font-bold text-slate-900">{row.fullName}</p>
+                        <p className="text-sm text-slate-500">{row.email} · {row.country}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Service: {row.serviceId} · Docs: {row.documentCount}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className={clsx("rounded-full px-3 py-1 font-semibold",
+                          row.paymentStatus === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+                          {row.paymentStatus}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+                          {(row.caseStatus ?? "SUBMITTED").replace(/_/g, " ")}
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            </section>
+                    {row.caseSummary && <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{row.caseSummary}</p>}
 
-            <section className={clsx(cardShell, "p-6")}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">Blog posts</h2>
-                  <p className="text-sm text-slate-500">Create and publish static posts</p>
-                </div>
-                <FileText className="h-5 w-5 text-blue-600" />
-              </div>
-              <div className="mt-4 space-y-3">
-                {blogs.map((blog) => (
-                  <div key={blog.id} className="rounded-2xl border border-slate-200 p-4 text-sm">
-                    <p className="font-semibold">{blog.title}</p>
-                    <p className="text-xs text-slate-500">/{blog.slug}</p>
-                    <p className="text-xs text-slate-500">
-                      {blog.published ? "Published" : "Draft"} • {blog.authorEmail}
-                    </p>
-                    {blog.excerpt && <p className="mt-1 text-sm text-slate-600">{blog.excerpt}</p>}
+                    {/* Payment plan */}
+                    <details className="rounded-xl border border-slate-200">
+                      <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 rounded-xl">Payment instructions</summary>
+                      <div className="px-4 pb-4 pt-2 space-y-2">
+                        {[
+                          { key: "bankInstructions", label: "Bank instructions", placeholder: "IFSC, account no., bank name", rows: 2 },
+                          { key: "paymentPlan", label: "Payment plan", placeholder: "Schedule / milestones", rows: 2 },
+                          { key: "terms", label: "Terms & conditions", placeholder: "Platform terms for this case", rows: 2 },
+                        ].map((f) => (
+                          <label key={f.key} className="block text-xs font-medium text-slate-600">
+                            {f.label}
+                            <textarea rows={f.rows} className={clsx("mt-1", inputCls)}
+                              defaultValue={(row[f.key as keyof CaseRow] as string) ?? ""}
+                              placeholder={f.placeholder}
+                              onChange={(e) => setPaymentDrafts((prev) => ({ ...prev, [row.id]: { ...prev[row.id], [f.key]: e.target.value } }))} />
+                          </label>
+                        ))}
+                        <button type="button" onClick={() => void handleSavePaymentPlan(row)} className={btnSmall}>
+                          Save payment plan
+                        </button>
+                      </div>
+                    </details>
+
+                    {/* Assignments */}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Case manager
+                        <select value={draft.managerId ?? mgMeta?.id ?? ""}
+                          onChange={(e) => setAssignmentDrafts((p) => ({ ...p, [row.id]: { ...p[row.id], managerId: e.target.value } }))}
+                          className={clsx("mt-1", inputCls)}>
+                          <option value="">Select manager</option>
+                          {managers.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.specialization}</option>)}
+                        </select>
+                      </label>
+                      <label className="block text-xs font-medium text-slate-600">
+                        Practitioner
+                        <select value={draft.practitionerId ?? prMeta?.id ?? ""}
+                          onChange={(e) => setAssignmentDrafts((p) => ({ ...p, [row.id]: { ...p[row.id], practitionerId: e.target.value } }))}
+                          className={clsx("mt-1", inputCls)}>
+                          <option value="">Select practitioner</option>
+                          {practitioners.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.focus}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => void handleAssignment(row)} className={btnPrimary}>
+                        <ClipboardCheck className="h-4 w-4" /> Save assignment
+                      </button>
+                      {row.paymentStatus !== "approved" && (
+                        <button type="button" onClick={() => void handleApprovePayment(row.id)}
+                          className={clsx(btnOutline, "border-emerald-400 text-emerald-700 hover:border-emerald-600")}>
+                          <CheckCircle2 className="h-4 w-4" /> Approve payment
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* CLIENTS */}
+          {tab === "clients" && (
+            <div className="max-w-4xl">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {clients.map((c) => (
+                  <div key={c.id} className={clsx(card, "p-5")}>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 text-sm font-bold mb-3">
+                      {c.fullName[0]?.toUpperCase()}
+                    </div>
+                    <p className="font-semibold text-slate-900">{c.fullName}</p>
+                    <p className="text-sm text-slate-500">{c.email}</p>
+                    <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                      <Globe2 className="h-3 w-3" /> {c.country}
+                    </div>
                   </div>
                 ))}
-                <form
-                  onSubmit={handleCreateBlog}
-                  className="space-y-3 rounded-2xl border border-dashed border-slate-300 p-4 text-sm"
-                >
-                  <label className="block text-xs text-slate-500">
-                    Title
-                    <input
-                      className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                      value={blogDraft.title}
-                      onChange={(e) => setBlogDraft((prev) => ({ ...prev, title: e.target.value }))}
-                    />
-                  </label>
-                  <label className="block text-xs text-slate-500">
-                    Slug (optional)
-                    <input
-                      className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                      value={blogDraft.slug}
-                      onChange={(e) => setBlogDraft((prev) => ({ ...prev, slug: e.target.value }))}
-                      placeholder="auto-generated-from-title"
-                    />
-                  </label>
-                  <label className="block text-xs text-slate-500">
-                    Excerpt
-                    <input
-                      className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                      value={blogDraft.excerpt}
-                      onChange={(e) =>
-                        setBlogDraft((prev) => ({ ...prev, excerpt: e.target.value }))
-                      }
-                      placeholder="Short summary"
-                    />
-                  </label>
-                  <label className="block text-xs text-slate-500">
-                    Content (markdown/plaintext)
-                    <textarea
-                      rows={6}
-                      className="mt-1 w-full rounded-2xl border border-slate-200 px-3 py-2"
-                      value={blogDraft.content}
-                      onChange={(e) =>
-                        setBlogDraft((prev) => ({ ...prev, content: e.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-xs text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={blogDraft.published}
-                      onChange={(e) =>
-                        setBlogDraft((prev) => ({ ...prev, published: e.target.checked }))
-                      }
-                    />
-                    Publish immediately
-                  </label>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-xs font-semibold text-amber-50"
-                  >
-                    Save blog
-                  </button>
-                </form>
+                {clients.length === 0 && <p className="text-sm text-slate-400 col-span-full">No clients yet.</p>}
               </div>
-            </section>
-          </div>
-        )}
-      </div>
+            </div>
+          )}
+
+          {/* ROSTER */}
+          {tab === "roster" && (
+            <div className="max-w-4xl space-y-6">
+              <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+                <form onSubmit={handleRosterUpload} className={clsx(card, "p-6 space-y-4")}>
+                  <h3 className="font-semibold text-slate-900">Upload roster (JSON)</h3>
+                  <textarea rows={10} value={rosterPayload} onChange={(e) => setRosterPayload(e.target.value)} className={clsx(inputCls, "font-mono text-xs")} />
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={rosterLoading} className={btnPrimary}>
+                      <UploadCloud className="h-4 w-4" /> {rosterLoading ? "Uploading…" : "Upload roster"}
+                    </button>
+                    <button type="button" onClick={() => void seedRoster()} className={btnOutline}>Seed sample</button>
+                  </div>
+                </form>
+                <div className="space-y-4">
+                  <div className={clsx(card, "p-5")}>
+                    <p className="text-sm font-semibold text-slate-900 mb-3">Case managers ({managers.length})</p>
+                    {managers.map((m) => (
+                      <div key={m.id} className="py-2 border-b border-slate-100 last:border-0 text-sm">
+                        <p className="font-medium text-slate-900">{m.name}</p>
+                        <p className="text-xs text-slate-400">{m.specialization} · {m.timezone} · Load: {m.weeklyLoad}</p>
+                      </div>
+                    ))}
+                    {managers.length === 0 && <p className="text-xs text-slate-400">None loaded.</p>}
+                  </div>
+                  <div className={clsx(card, "p-5")}>
+                    <p className="text-sm font-semibold text-slate-900 mb-3">Practitioners ({practitioners.length})</p>
+                    {practitioners.map((p) => (
+                      <div key={p.id} className="py-2 border-b border-slate-100 last:border-0 text-sm">
+                        <p className="font-medium text-slate-900">{p.name}</p>
+                        <p className="text-xs text-slate-400">{p.bar} · {p.focus}</p>
+                      </div>
+                    ))}
+                    {practitioners.length === 0 && <p className="text-xs text-slate-400">None loaded.</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SESSIONS */}
+          {tab === "sessions" && (
+            <div className="max-w-4xl space-y-3">
+              <p className="text-sm text-slate-500">{sessionCounts.active} active / {sessionCounts.total} total</p>
+              {sessions.map((s) => {
+                const expired = new Date(s.expiresAt).getTime() <= Date.now();
+                const revoked = Boolean(s.revokedAt);
+                return (
+                  <div key={s.id} className={clsx(card, "p-4 flex items-center justify-between gap-3")}>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 truncate">{s.subjectEmail}</p>
+                      <p className="text-xs text-slate-400">Role: {s.role}{s.actingAsRole ? ` → ${s.actingAsRole}` : ""}</p>
+                      <p className="text-xs text-slate-400">Expires: {new Date(s.expiresAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={clsx("rounded-full px-3 py-1 text-xs font-semibold",
+                        revoked || expired ? "bg-slate-100 text-slate-500" : "bg-emerald-100 text-emerald-700")}>
+                        {revoked ? "Revoked" : expired ? "Expired" : "Active"}
+                      </span>
+                      {!revoked && !expired && (
+                        <button type="button" onClick={() => void handleRevokeSession(s.id)} className={btnSmall}>End</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {sessions.length === 0 && <p className="text-sm text-slate-400">No sessions found.</p>}
+            </div>
+          )}
+
+          {/* ADMIN USERS */}
+          {tab === "users" && (
+            <div className="max-w-3xl space-y-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {users.map((u) => (
+                  <div key={u.id} className={clsx(card, "p-4")}>
+                    <p className="font-semibold text-slate-900">{u.displayName}</p>
+                    <p className="text-sm text-slate-500">{u.email}</p>
+                    <span className="mt-1 inline-flex rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">{u.role}</span>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleCreateUser} className={clsx(card, "p-6 space-y-4")}>
+                <h3 className="font-semibold text-slate-900">Create admin user</h3>
+                {[
+                  { label: "Display name", key: "displayName", type: "text", placeholder: "Compliance Lead" },
+                  { label: "Email", key: "email", type: "email", placeholder: "admin@org.com" },
+                  { label: "Password", key: "password", type: "password", placeholder: "" },
+                  { label: "Role", key: "role", type: "text", placeholder: "admin / super-admin" },
+                ].map((f) => (
+                  <label key={f.key} className="block text-sm font-medium text-slate-700">
+                    {f.label}
+                    <input type={f.type} value={newUser[f.key as keyof typeof newUser]} placeholder={f.placeholder}
+                      onChange={(e) => setNewUser((p) => ({ ...p, [f.key]: e.target.value }))} className={clsx("mt-1", inputCls)} required />
+                  </label>
+                ))}
+                <button type="submit" disabled={creating} className={btnPrimary}>{creating ? "Creating…" : "Create user"}</button>
+              </form>
+            </div>
+          )}
+
+          {/* BLOGS */}
+          {tab === "blogs" && (
+            <div className="max-w-4xl space-y-6">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {blogs.map((b) => (
+                  <div key={b.id} className={clsx(card, "p-4")}>
+                    <p className="font-semibold text-slate-900">{b.title}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">/{b.slug}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className={clsx("rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        b.published ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600")}>
+                        {b.published ? "Published" : "Draft"}
+                      </span>
+                    </div>
+                    {b.excerpt && <p className="mt-2 text-sm text-slate-600">{b.excerpt}</p>}
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleCreateBlog} className={clsx(card, "p-6 space-y-4")}>
+                <h3 className="font-semibold text-slate-900">New blog post</h3>
+                <label className="block text-sm font-medium text-slate-700">Title<input value={blogDraft.title} onChange={(e) => setBlogDraft((p) => ({ ...p, title: e.target.value }))} className={clsx("mt-1", inputCls)} required /></label>
+                <label className="block text-sm font-medium text-slate-700">Slug (optional)<input value={blogDraft.slug} placeholder="auto-generated" onChange={(e) => setBlogDraft((p) => ({ ...p, slug: e.target.value }))} className={clsx("mt-1", inputCls)} /></label>
+                <label className="block text-sm font-medium text-slate-700">Excerpt<input value={blogDraft.excerpt} onChange={(e) => setBlogDraft((p) => ({ ...p, excerpt: e.target.value }))} className={clsx("mt-1", inputCls)} /></label>
+                <label className="block text-sm font-medium text-slate-700">Content<textarea rows={6} value={blogDraft.content} onChange={(e) => setBlogDraft((p) => ({ ...p, content: e.target.value }))} className={clsx("mt-1", inputCls)} required /></label>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer">
+                  <input type="checkbox" checked={blogDraft.published} onChange={(e) => setBlogDraft((p) => ({ ...p, published: e.target.checked }))} className="rounded" />
+                  Publish immediately
+                </label>
+                <button type="submit" className={btnPrimary}>Save blog post</button>
+              </form>
+            </div>
+          )}
+
+          {/* DOCUMENTS */}
+          {tab === "docs" && (
+            <div className="max-w-4xl space-y-3">
+              {documents.map((d) => (
+                <div key={d.id} className={clsx(card, "p-4 flex gap-4")}>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 flex-shrink-0">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <p className="font-semibold text-slate-900 text-sm">{d.name}</p>
+                      <span className={clsx("rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        d.status === "ready" ? "bg-emerald-100 text-emerald-700" : d.status === "processing" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600")}>
+                        {d.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">{d.type} · Case: {d.caseId}</p>
+                    <p className="text-sm text-slate-600 mt-1">{d.summary}</p>
+                  </div>
+                </div>
+              ))}
+              {documents.length === 0 && <p className="text-sm text-slate-400">No documents yet.</p>}
+            </div>
+          )}
+
+          {/* VIDEOS */}
+          {tab === "videos" && (
+            <div className="max-w-4xl space-y-3">
+              {videos.map((v) => (
+                <div key={v.id} className={clsx(card, "p-4 flex items-center justify-between gap-3")}>
+                  <div>
+                    <p className="font-semibold text-slate-900 text-sm">{v.scheduledAt}</p>
+                    <p className="text-xs text-slate-400">Case: {v.caseId}</p>
+                  </div>
+                  <a href={v.link} target="_blank" rel="noreferrer"
+                    className={clsx(btnSmall, "text-indigo-600 border-indigo-200 hover:border-indigo-400")}>
+                    <Video className="h-3.5 w-3.5" /> Join meeting
+                  </a>
+                </div>
+              ))}
+              {videos.length === 0 && <p className="text-sm text-slate-400">No meetings scheduled.</p>}
+            </div>
+          )}
+
+        </div>
+      </main>
     </div>
   );
 }

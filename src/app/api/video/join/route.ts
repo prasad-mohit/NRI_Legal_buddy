@@ -63,9 +63,8 @@ export async function GET(req: Request) {
       caseId: join.meetingRecord.caseId,
       scheduledAt: join.meetingRecord.scheduledAt,
       link: join.meetingRecord.link,
+      joinUrl: join.joinUrl,
       join: {
-        meeting: join.meeting,
-        attendee: join.attendee,
         attendeeId: join.attendeeId,
         expiresAt: join.expiresAt,
       },
@@ -78,13 +77,13 @@ export async function GET(req: Request) {
     if (reason === "CASE_ACCESS_DENIED") {
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
-    if (reason === "MEETING_JOIN_TOO_EARLY") {
+    if (reason === "MEETING_NOT_YET_OPEN") {
       return NextResponse.json(
         { message: "Meeting join is not available yet." },
         { status: 403 }
       );
     }
-    if (reason === "MEETING_JOIN_WINDOW_CLOSED") {
+    if (reason === "MEETING_EXPIRED") {
       return NextResponse.json(
         { message: "Meeting join window has closed." },
         { status: 410 }
@@ -114,7 +113,6 @@ export async function DELETE(req: Request) {
   try {
     await leaveVideoMeeting({
       meetingId,
-      attendeeId,
       session: auth.session!,
     });
     return NextResponse.json({ ok: true });
