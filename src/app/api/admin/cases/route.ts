@@ -34,11 +34,14 @@ export async function GET() {
       bankInstructions: string | null;
       paymentPlan: string | null;
       terms: string | null;
+      paymentProofs: string | null;
+      caseManagerId: string | null;
+      practitionerId: string | null;
     }>
   >`
     SELECT c.id, c.serviceId, c.stage, c.caseStatus, c.stageStatus, c.platformFeePaid, c.paymentStatus, c.caseDetails, c.caseSummary,
       c.caseManagerMeta, c.practitionerMeta, c.documentCount, c.videoSlot, c.updatedAt,
-      c.bankInstructions, c.paymentPlan, c.terms,
+      c.bankInstructions, c.paymentPlan, c.terms, c.paymentProofs, c.caseManagerId, c.practitionerId,
       u.fullName, u.email, u.country
     FROM "Case" c
     JOIN User u ON u.id = c.userId

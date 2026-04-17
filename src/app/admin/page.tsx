@@ -45,6 +45,7 @@ interface CaseRow {
   fullName: string; email: string; country: string;
   bankInstructions?: string | null; paymentPlan?: string | null; terms?: string | null;
   paymentProofs?: string | null;  // JSON string of proof submissions
+  caseManagerId?: string | null; practitionerId?: string | null;
 }
 interface CaseManagerRow { id: string; name: string; timezone: string; specialization: string; weeklyLoad: number }
 interface PractitionerRow { id: string; name: string; bar: string; focus: string }
@@ -137,14 +138,16 @@ export default function AdminConsole() {
   };
 
   const handleApprovePayment = async (caseId: string) => {
-    await api("/api/admin/payments/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId }) });
-    await loadAll(); setActionMsg("Payment approved.");
+    const r = await api("/api/admin/payments/approve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId }) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})) as { message?: string }; setActionMsg(`Error: ${d.message ?? r.statusText}`); return; }
+    await loadAll(); setActionMsg("Payment approved — case moved to AWAITING ASSIGNMENT.");
   };
 
   const handleAssignment = async (row: CaseRow) => {
     const draft = assignmentDrafts[row.id] ?? {};
-    await api("/api/admin/assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId: row.id, caseManager: managers.find((m) => m.id === draft.managerId), practitioner: practitioners.find((p) => p.id === draft.practitionerId) }) });
-    await loadAll(); setActionMsg("Assignment saved.");
+    const r = await api("/api/admin/assignments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ caseId: row.id, caseManager: managers.find((m) => m.id === draft.managerId), practitioner: practitioners.find((p) => p.id === draft.practitionerId) }) });
+    if (!r.ok) { const d = await r.json().catch(() => ({})) as { message?: string }; setActionMsg(`Error: ${d.message ?? r.statusText}`); return; }
+    await loadAll(); setActionMsg("Assignment saved — client features activated.");
   };
 
   const handleRevokeSession = async (id: string) => {
@@ -154,8 +157,9 @@ export default function AdminConsole() {
 
   const handleSavePaymentPlan = async (row: CaseRow) => {
     const d = paymentDrafts[row.id] ?? {};
-    await api(`/api/cases/${row.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bankInstructions: d.bankInstructions ?? row.bankInstructions, paymentPlan: d.paymentPlan ?? row.paymentPlan, terms: d.terms ?? row.terms }) });
-    await loadAll(); setActionMsg("Payment plan saved.");
+    const r = await api(`/api/admin/cases/${row.id}/payment-instructions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bankInstructions: d.bankInstructions ?? row.bankInstructions, paymentPlan: d.paymentPlan ?? row.paymentPlan, terms: d.terms ?? row.terms }) });
+    if (!r.ok) { const errD = await r.json().catch(() => ({})) as { message?: string }; setActionMsg(`Error: ${errD.message ?? r.statusText}`); return; }
+    await loadAll(); setActionMsg("Payment instructions saved and published to client.");
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {

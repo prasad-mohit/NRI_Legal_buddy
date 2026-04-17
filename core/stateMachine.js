@@ -26,6 +26,7 @@ export const allowedCaseTransitions = {
     CaseStatus.UNDER_REVIEW,
     CaseStatus.AWAITING_CLIENT_APPROVAL,
     CaseStatus.PAYMENT_PENDING,
+    CaseStatus.AWAITING_ASSIGNMENT,
   ],
   [CaseStatus.UNDER_REVIEW]: [CaseStatus.AWAITING_CLIENT_APPROVAL, CaseStatus.PAYMENT_PENDING],
   [CaseStatus.AWAITING_CLIENT_APPROVAL]: [CaseStatus.PAYMENT_PENDING, CaseStatus.UNDER_REVIEW],
