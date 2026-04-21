@@ -57,6 +57,16 @@ interface SessionRow { id: string; subjectEmail: string; role: string; actingAsE
 type CaseTab = "SUBMITTED" | "PAYMENT_PENDING" | "AWAITING_ASSIGNMENT" | "IN_PROGRESS" | "CLOSED";
 type AdminTab = "dashboard" | "cases" | "clients" | "roster" | "sessions" | "users" | "blogs" | "docs" | "videos";
 
+// Single status label used across all case cards
+const CASE_STATUS_CONFIG: Record<string, { label: string; sublabel: string; cls: string }> = {
+  SUBMITTED:           { label: "Submitted",                  sublabel: "Awaiting payment from client",        cls: "bg-blue-100 text-blue-700" },
+  PAYMENT_PENDING:     { label: "Payment Pending Review",      sublabel: "Client submitted bank transfer proof", cls: "bg-amber-100 text-amber-800" },
+  AWAITING_ASSIGNMENT: { label: "Payment Approved — Assign Team", sublabel: "Ready for case manager + lawyer",    cls: "bg-emerald-100 text-emerald-700" },
+  IN_PROGRESS:         { label: "Active",                     sublabel: "Legal team working the case",         cls: "bg-emerald-100 text-emerald-700" },
+  CLOSED:              { label: "Closed",                     sublabel: "",                                   cls: "bg-slate-100 text-slate-600" },
+};
+const getCaseStatusConfig = (s?: string | null) => CASE_STATUS_CONFIG[s ?? "SUBMITTED"] ?? { label: s ?? "Unknown", sublabel: "", cls: "bg-slate-100 text-slate-500" };
+
 // ── Root ─────────────────────────────────────────────────────────────────────
 export default function AdminConsole() {
   const [session, setSession] = useState<{ email: string; displayName: string; role: string } | null>(null);
@@ -373,6 +383,7 @@ export default function AdminConsole() {
                 const draft = assignmentDrafts[row.id] ?? {};
                 const paymentApproved = row.paymentStatus === "approved";
                 const canAssign = paymentApproved;
+                const statusCfg = getCaseStatusConfig(row.caseStatus);
 
                 // Parse payment proofs
                 let proofs: Array<{ id: string; submittedBy: string; submittedAt: string; url?: string; note?: string; approved?: boolean }> = [];
@@ -384,17 +395,11 @@ export default function AdminConsole() {
                       <div>
                         <p className="font-bold text-slate-900">{row.fullName}</p>
                         <p className="text-sm text-slate-500">{row.email} · {row.country}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">Service: {row.serviceId} · Docs: {row.documentCount} · Stage: {row.stage}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Service: {row.serviceId} · Docs: {row.documentCount}</p>
                       </div>
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <span className={clsx("rounded-full px-3 py-1 font-semibold",
-                          paymentApproved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
-                          Payment: {row.paymentStatus}
-                        </span>
-                        <span className={clsx("rounded-full px-3 py-1 text-slate-600",
-                          (row.caseStatus ?? "") === "AWAITING_ASSIGNMENT" ? "bg-blue-100 text-blue-700 font-semibold" : "bg-slate-100")}>
-                          {(row.caseStatus ?? "SUBMITTED").replace(/_/g, " ")}
-                        </span>
+                      <div className={clsx("rounded-xl px-3 py-1.5 text-xs flex-shrink-0", statusCfg.cls)}>
+                        <p className="font-bold">{statusCfg.label}</p>
+                        {statusCfg.sublabel && <p className="opacity-75 mt-0.5">{statusCfg.sublabel}</p>}
                       </div>
                     </div>
                     {row.caseSummary && <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{row.caseSummary}</p>}

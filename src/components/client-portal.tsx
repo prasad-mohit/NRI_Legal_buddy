@@ -38,6 +38,20 @@ import { usePortalStore } from "@/store/usePortalStore";
 // ---------------------------------------------------------------------------
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 const inputCls =
+// ---------------------------------------------------------------------------
+// Single source of truth for case status display
+// ---------------------------------------------------------------------------
+type StatusDisplay = { label: string; sublabel: string; pill: string };
+function caseStatusDisplay(status?: string | null): StatusDisplay {
+  switch (status) {
+    case "SUBMITTED":            return { label: "Case Submitted",            sublabel: "Under initial review",                   pill: "bg-blue-100 text-blue-700" };
+    case "PAYMENT_PENDING":      return { label: "Awaiting Payment Verification", sublabel: "Admin will verify your bank transfer",      pill: "bg-amber-100 text-amber-700" };
+    case "AWAITING_ASSIGNMENT":  return { label: "Payment Approved",            sublabel: "Legal team assignment in progress",        pill: "bg-emerald-100 text-emerald-700" };
+    case "IN_PROGRESS":          return { label: "Active — Team Assigned",       sublabel: "Your legal team is working on your case",  pill: "bg-emerald-100 text-emerald-700" };
+    case "CLOSED":               return { label: "Case Closed",                 sublabel: "",                                       pill: "bg-slate-100 text-slate-600" };
+    default:                     return { label: status?.replace(/_/g, " ") ?? "Pending", sublabel: "",                              pill: "bg-slate-100 text-slate-500" };
+  }
+}
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
 const btnPrimary =
   "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition";
@@ -444,11 +458,12 @@ function PortalShell() {
           </div>
         </div>
         {/* Case status badge */}
-        {caseStatus && caseStatus !== "SUBMITTED" && (
-          <div className="mx-4 mt-4 rounded-xl bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700">
-            {caseStatus.replace(/_/g, " ")}
+        {caseStatus && (() => { const d = caseStatusDisplay(caseStatus); return (
+          <div className={clsx("mx-4 mt-4 rounded-xl px-3 py-2", d.pill)}>
+            <p className="text-xs font-semibold">{d.label}</p>
+            {d.sublabel && <p className="text-[11px] opacity-80 mt-0.5">{d.sublabel}</p>}
           </div>
-        )}
+        ); })()}
         {/* Nav */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {navItems.map((item) => (
@@ -493,7 +508,7 @@ function PortalShell() {
               {navItems.find((n) => n.id === section)?.label}
             </h1>
             <p className="text-xs text-slate-400">
-              {stage !== "login" ? `Stage: ${stage.replace(/-/g, " ")}` : "Welcome back"}
+              {caseStatus ? caseStatusDisplay(caseStatus).sublabel || caseStatusDisplay(caseStatus).label : "Welcome back"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -565,11 +580,11 @@ function DashboardView({ onNavigate }: { onNavigate: (s: PortalSection) => void 
             <p className="text-sm text-slate-500 mt-1">
               {selectedService ? `Service: ${selectedService.label}` : "Select a legal service to begin your case journey."}
             </p>
-            {caseStatus && (
-              <span className="mt-2 inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-                {caseStatus.replace(/_/g, " ")}
+            {caseStatus && (() => { const d = caseStatusDisplay(caseStatus); return (
+              <span className={clsx("mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold", d.pill)}>
+                {d.label}
               </span>
-            )}
+            ); })()}
           </div>
         </div>
       </div>
@@ -907,15 +922,20 @@ function CaseView() {
   return (
     <div className="max-w-4xl space-y-6">
       {/* Status banner */}
-      {caseStatus && (
-        <div className={clsx(card, "px-5 py-4 flex items-center gap-3")}>
-          <BadgeCheck className="h-5 w-5 text-indigo-600 flex-shrink-0" />
+      {caseStatus && (() => { const d = caseStatusDisplay(caseStatus); return (
+        <div className={clsx("rounded-2xl border px-5 py-4 flex items-center gap-3",
+          caseStatus === "AWAITING_ASSIGNMENT" || caseStatus === "IN_PROGRESS" ? "border-emerald-200 bg-emerald-50" :
+          caseStatus === "PAYMENT_PENDING" ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50")}>
+          <BadgeCheck className={clsx("h-5 w-5 flex-shrink-0",
+            caseStatus === "AWAITING_ASSIGNMENT" || caseStatus === "IN_PROGRESS" ? "text-emerald-600" :
+            caseStatus === "PAYMENT_PENDING" ? "text-amber-600" : "text-blue-600")} />
           <div>
-            <p className="text-sm font-semibold text-slate-900">Case status: <span className="text-indigo-700">{caseStatus.replace(/_/g, " ")}</span></p>
-            {caseSummary && <p className="text-xs text-slate-500 mt-0.5">{caseSummary}</p>}
+            <p className="text-sm font-bold text-slate-900">{d.label}</p>
+            <p className="text-xs text-slate-600 mt-0.5">{d.sublabel}</p>
+            {caseSummary && <p className="text-xs text-slate-500 mt-1 italic">{caseSummary}</p>}
           </div>
         </div>
-      )}
+      ); })()}
 
       {/* Assignments */}
       {(assignedCaseManager || assignedPractitioner) && (
