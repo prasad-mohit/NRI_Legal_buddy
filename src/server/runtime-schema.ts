@@ -243,6 +243,27 @@ export const ensureRuntimeSchema = async () => {
     ON Blog(published, createdAt DESC)
   `);
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS CaseManager (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'IST',
+      specialization TEXT NOT NULL DEFAULT 'General',
+      weeklyLoad INTEGER NOT NULL DEFAULT 0,
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS Practitioner (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      bar TEXT NOT NULL DEFAULT '',
+      focus TEXT NOT NULL DEFAULT '',
+      createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   ensured = true;
 };
 

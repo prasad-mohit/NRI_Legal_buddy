@@ -43,7 +43,7 @@ export const allowedStageTransitions = {
     StageStatus.PAID,
     StageStatus.IN_PROGRESS,
   ],
-  [StageStatus.AWAITING_PAYMENT]: [StageStatus.PAYMENT_SUBMITTED],
+  [StageStatus.AWAITING_PAYMENT]: [StageStatus.PAYMENT_SUBMITTED, StageStatus.PAID],
   [StageStatus.PAYMENT_SUBMITTED]: [StageStatus.PAID],
   [StageStatus.PAID]: [StageStatus.IN_PROGRESS],
   [StageStatus.IN_PROGRESS]: [StageStatus.COMPLETE],
