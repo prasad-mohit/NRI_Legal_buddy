@@ -38,25 +38,26 @@ import { usePortalStore } from "@/store/usePortalStore";
 // ---------------------------------------------------------------------------
 const card = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 const inputCls =
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
+const btnPrimary =
+  "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition";
+const btnOutline =
+  "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-500 transition";
+
 // ---------------------------------------------------------------------------
 // Single source of truth for case status display
 // ---------------------------------------------------------------------------
 type StatusDisplay = { label: string; sublabel: string; pill: string };
 function caseStatusDisplay(status?: string | null): StatusDisplay {
   switch (status) {
-    case "SUBMITTED":            return { label: "Case Submitted",            sublabel: "Under initial review",                   pill: "bg-blue-100 text-blue-700" };
-    case "PAYMENT_PENDING":      return { label: "Awaiting Payment Verification", sublabel: "Admin will verify your bank transfer",      pill: "bg-amber-100 text-amber-700" };
-    case "AWAITING_ASSIGNMENT":  return { label: "Payment Approved",            sublabel: "Legal team assignment in progress",        pill: "bg-emerald-100 text-emerald-700" };
-    case "IN_PROGRESS":          return { label: "Active — Team Assigned",       sublabel: "Your legal team is working on your case",  pill: "bg-emerald-100 text-emerald-700" };
-    case "CLOSED":               return { label: "Case Closed",                 sublabel: "",                                       pill: "bg-slate-100 text-slate-600" };
-    default:                     return { label: status?.replace(/_/g, " ") ?? "Pending", sublabel: "",                              pill: "bg-slate-100 text-slate-500" };
+    case "SUBMITTED":            return { label: "Case Submitted",               sublabel: "Under initial review",                   pill: "bg-blue-100 text-blue-700" };
+    case "PAYMENT_PENDING":      return { label: "Awaiting Payment Verification", sublabel: "Admin will verify your bank transfer",    pill: "bg-amber-100 text-amber-700" };
+    case "AWAITING_ASSIGNMENT":  return { label: "Payment Approved",              sublabel: "Legal team assignment in progress",       pill: "bg-emerald-100 text-emerald-700" };
+    case "IN_PROGRESS":          return { label: "Active — Team Assigned",        sublabel: "Your legal team is working on your case", pill: "bg-emerald-100 text-emerald-700" };
+    case "CLOSED":               return { label: "Case Closed",                   sublabel: "",                                       pill: "bg-slate-100 text-slate-600" };
+    default:                     return { label: status?.replace(/_/g, " ") ?? "Pending", sublabel: "",                               pill: "bg-slate-100 text-slate-500" };
   }
 }
-  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500";
-const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 transition";
-const btnOutline =
-  "inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-500 transition";
 
 // ---------------------------------------------------------------------------
 // Root
@@ -544,6 +545,7 @@ function DashboardView({ onNavigate }: { onNavigate: (s: PortalSection) => void 
   const platformFeePaid = usePortalStore((s) => s.platformFeePaid);
   const paymentCaptured = usePortalStore((s) => s.paymentCaptured);
   const paymentStatus = usePortalStore((s) => s.paymentStatus);
+  const caseId = usePortalStore((s) => s.caseId);
   const timeline = usePortalStore((s) => s.timeline);
   const assignedCaseManager = usePortalStore((s) => s.assignedCaseManager);
   const assignedPractitioner = usePortalStore((s) => s.assignedPractitioner);
