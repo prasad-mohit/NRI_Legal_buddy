@@ -868,7 +868,7 @@ function ServiceCatalog() {
                 <h3 className="font-semibold text-slate-900">Submit case & proceed to payment</h3>
               </div>
               <p className="text-sm text-slate-500 mb-4">
-                Once you submit, your case is registered and you'll receive bank transfer instructions to complete the <strong>$50 platform fee</strong>.
+                Once you submit, your case is registered and you&apos;ll receive bank transfer instructions to complete the <strong>$50 platform fee</strong>.
                 Admin will verify your payment and assign a case manager + lawyer — all features unlock after that.
               </p>
               {paymentActionMessage && (

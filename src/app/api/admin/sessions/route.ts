@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 
 import prisma from "@/server/db";
@@ -13,21 +15,11 @@ export async function GET() {
 
   const sessions = await prisma.session.findMany({
     orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      subjectEmail: true,
-      role: true,
-      expiresAt: true,
-      revokedAt: true,
-      actingAsEmail: true,
-      actingAsRole: true,
-      createdAt: true,
-    },
   });
 
   const now = Date.now();
   const active = sessions.filter(
-    (s) => !s.revokedAt && new Date(s.expiresAt).getTime() > now
+    (s) => !s.revokedAt && new Date(s.expiresAt as string).getTime() > now
   );
 
   return NextResponse.json({
@@ -48,9 +40,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "Missing sessionId or action" }, { status: 400 });
   }
 
-  await prisma.session.updateMany({
+  await prisma.session.update({
     where: { id: body.sessionId },
-    data: { revokedAt: new Date() },
+    data: { revokedAt: new Date().toISOString() },
   });
 
   return NextResponse.json({ revoked: body.sessionId });

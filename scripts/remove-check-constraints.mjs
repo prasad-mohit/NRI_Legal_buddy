@@ -1,28 +1,23 @@
 // Migration: remove CHECK constraints from "Case" table so AWAITING_ASSIGNMENT is allowed.
-import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import initSqlJs from "sql.js";
+import Database from "better-sqlite3";
 
 const rootDir = process.cwd();
 const dbPath = resolve(rootDir, "prisma", "dev.db");
 
-const SQL = await initSqlJs({
-  locateFile: (file) => resolve(rootDir, "node_modules", "sql.js", "dist", file),
-});
-
-const dbFile = await readFile(dbPath);
-const db = new SQL.Database(dbFile);
+const db = new Database(dbPath);
+db.pragma("journal_mode = WAL");
 
 // Check current schema
-const info = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='Case'");
-const currentSql = info[0]?.values[0]?.[0] ?? "";
+const info = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='Case'").get();
+const currentSql = info?.sql ?? "";
 console.log("Current Case table SQL (trimmed):");
 console.log(currentSql.toString().slice(0, 600));
 
 // Recreate without CHECK constraints using rename trick
-db.run("PRAGMA foreign_keys = OFF");
+db.pragma("foreign_keys = OFF");
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS "_Case_new" (
     id TEXT PRIMARY KEY NOT NULL,
     userId TEXT NOT NULL,
@@ -54,7 +49,7 @@ db.run(`
 `);
 
 // Copy all existing data
-db.run(`
+db.exec(`
   INSERT INTO "_Case_new"
     (id, userId, serviceId, stage, caseStatus, stageStatus, platformFeePaid, paymentStatus,
      caseDetails, caseSummary, caseManagerMeta, practitionerMeta, caseManagerId, practitionerId,
@@ -73,28 +68,28 @@ db.run(`
   FROM "Case"
 `);
 
-const oldCount = db.exec('SELECT COUNT(*) FROM "Case"')[0]?.values[0]?.[0];
-const newCount = db.exec('SELECT COUNT(*) FROM "_Case_new"')[0]?.values[0]?.[0];
+const oldCount = db.prepare('SELECT COUNT(*) as cnt FROM "Case"').get()?.cnt;
+const newCount = db.prepare('SELECT COUNT(*) as cnt FROM "_Case_new"').get()?.cnt;
 console.log(`Rows: original=${oldCount} new=${newCount}`);
 
-db.run('DROP TABLE "Case"');
-db.run('ALTER TABLE "_Case_new" RENAME TO "Case"');
+db.exec('DROP TABLE "Case"');
+db.exec('ALTER TABLE "_Case_new" RENAME TO "Case"');
 
-db.run("PRAGMA foreign_keys = ON");
+db.pragma("foreign_keys = ON");
 
 // Verify
-const verify = db.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='Case'");
-const newSql = verify[0]?.values[0]?.[0] ?? "";
+const verify = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='Case'").get();
+const newSql = verify?.sql ?? "";
 if (newSql.toString().includes("CHECK")) {
   console.error("ERROR: CHECK constraint still present!");
+  db.close();
   process.exit(1);
 } else {
   console.log("✓ CHECK constraint removed successfully");
 }
 
-const finalCount = db.exec('SELECT COUNT(*) FROM "Case"')[0]?.values[0]?.[0];
+const finalCount = db.prepare('SELECT COUNT(*) as cnt FROM "Case"').get()?.cnt;
 console.log(`✓ Final row count: ${finalCount}`);
 
-const data = db.export();
-await writeFile(dbPath, Buffer.from(data));
+db.close();
 console.log("✓ Database saved");

@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // For PgBouncer / Prisma Accelerate, set directUrl separately:
+  // directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -192,4 +194,37 @@ model Blog {
   published   Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model CaseManager {
+  id             String   @id
+  name           String
+  timezone       String   @default("IST")
+  specialization String   @default("General")
+  weeklyLoad     Int      @default(0)
+  createdAt      DateTime @default(now())
+}
+
+model Practitioner {
+  id        String   @id
+  name      String
+  bar       String   @default("")
+  focus     String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model MeetingAttendeeSession {
+  id             String    @id
+  meetingId      String
+  caseId         String
+  attendeeId     String
+  externalUserId String
+  userEmail      String
+  userRole       String
+  issuedAt       DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+
+  @@index([meetingId, userEmail])
+  @@index([expiresAt])
 }

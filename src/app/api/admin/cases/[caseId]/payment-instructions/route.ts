@@ -20,7 +20,7 @@ export async function POST(
     terms?: string;
   };
 
-  const exists = await prisma.case.findUnique({ where: { id: params.caseId }, select: { id: true } });
+  const exists = await prisma.case.findUnique({ where: { id: params.caseId } });
   if (!exists) return NextResponse.json({ message: "Case not found" }, { status: 404 });
 
   await prisma.case.update({

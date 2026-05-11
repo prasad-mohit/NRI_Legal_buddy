@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 
 import { getPublishedBlogBySlug } from "@/server/blogs";
 
+export const dynamic = "force-dynamic";
+
 export default async function BlogSlugPage({ params }: { params: { slug: string } }) {
   const post = await getPublishedBlogBySlug(params.slug);
   if (!post) return notFound();

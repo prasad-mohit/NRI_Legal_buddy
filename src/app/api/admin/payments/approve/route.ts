@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 
 import { normalizeCaseStatus, normalizeStageStatus, validateCaseTransition, validateStageTransition } from "@/core/stateMachine";
@@ -35,17 +37,15 @@ export async function POST(req: Request) {
   validateCaseTransition(currentCaseStatus, nextCaseStatus);
   validateStageTransition(currentStageStatus, nextStageStatus);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.case.update({
-      where: { id: body.caseId },
-      data: {
-        paymentStatus: "approved",
-        platformFeePaid: true,
-        stageStatus: nextStageStatus,
-        caseStatus: nextCaseStatus,
-        stage: "payment-approved",
-      },
-    });
+  await prisma.case.update({
+    where: { id: body.caseId },
+    data: {
+      paymentStatus: "approved",
+      platformFeePaid: true,
+      stageStatus: nextStageStatus,
+      caseStatus: nextCaseStatus,
+      stage: "payment-approved",
+    },
   });
 
   const record = await getCase(body.caseId);

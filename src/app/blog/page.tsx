@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { listPublishedBlogs } from "@/server/blogs";
 
+export const dynamic = "force-dynamic";
+
 export default async function BlogListPage() {
   const posts = await listPublishedBlogs();
 

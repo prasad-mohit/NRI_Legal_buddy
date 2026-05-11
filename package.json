@@ -12,14 +12,13 @@
     "db:seed-admin": "node scripts/seed-admin.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^5.18.0",
+    "sql.js": "^1.10.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.562.0",
     "next": "14.2.5",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "sql.js": "^1.12.0",
     "zustand": "^5.0.10"
   },
   "devDependencies": {
@@ -29,7 +28,6 @@
     "@types/react-dom": "^18",
     "eslint": "8.57.1",
     "eslint-config-next": "14.2.5",
-    "prisma": "^5.18.0",
     "tailwindcss": "^4",
     "typescript": "^5.4.5",
     "vitest": "^1.6.0"

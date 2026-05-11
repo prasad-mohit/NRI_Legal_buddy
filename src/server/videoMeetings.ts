@@ -132,16 +132,10 @@ export const createVideoMeetingForCase = async (payload: {
   const joinUrl = buildJitsiUrl(roomName);
   const meetingId = `MTG-${randomUUID()}`;
 
-  await prisma.meeting.create({
-    data: {
-      id: meetingId,
-      caseId: payload.caseId,
-      scheduledAt,
-      link: joinUrl,
-      provider: VIDEO_PROVIDER,
-      createdByEmail: normalizeEmail(payload.session.effectiveEmail),
-    },
-  });
+  await prisma.$executeRaw`
+    INSERT INTO Meeting (id, caseId, scheduledAt, link, provider, createdByEmail, createdAt)
+    VALUES (${meetingId}, ${payload.caseId}, ${scheduledAt}, ${joinUrl}, ${VIDEO_PROVIDER}, ${normalizeEmail(payload.session.effectiveEmail)}, CURRENT_TIMESTAMP)
+  `;
 
   const timelineEntry = {
     id: `evt-video-${Date.now()}`,
@@ -205,7 +199,11 @@ export const createJoinTokenForMeeting = async (payload: {
 }): Promise<VideoJoinTokenRecord> => {
   await ensureRuntimeSchema();
 
-  const row = await prisma.meeting.findUnique({ where: { id: payload.meetingId } });
+  const rows = await prisma.$queryRaw<Array<{ id: string; caseId: string; scheduledAt: string; link: string; provider: string; createdByEmail: string; createdAt: string }>>`
+    SELECT id, caseId, scheduledAt, link, provider, createdByEmail, createdAt
+    FROM Meeting WHERE id = ${payload.meetingId} LIMIT 1
+  `;
+  const row = rows[0];
   if (!row) throw new Error("MEETING_NOT_FOUND");
 
   const caseRecord = await getCase(row.caseId);
@@ -237,7 +235,7 @@ export const createJoinTokenForMeeting = async (payload: {
       link: row.link,
       provider: row.provider,
       createdByEmail: row.createdByEmail,
-      createdAt: new Date(row.createdAt).toISOString(),
+      createdAt: String(row.createdAt),
       roomName: "",
     },
     meetingId: row.id,

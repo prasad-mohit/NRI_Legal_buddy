@@ -133,7 +133,7 @@ export async function PATCH(req: Request, { params }: { params: { caseId: string
 
   if (body.document) {
     // Build accessList: userId + caseManagerId + practitionerId
-    const caseRaw = await prisma.case.findUnique({ where: { id: params.caseId }, select: { userId: true, caseManagerId: true, practitionerId: true } });
+    const caseRaw = await prisma.case.findUnique({ where: { id: params.caseId } });
     const accessParts = [caseRaw?.userId, caseRaw?.caseManagerId, caseRaw?.practitionerId].filter(Boolean);
     await addDocument(params.caseId, body.document, { accessList: accessParts.join(",") });
     await logAction({

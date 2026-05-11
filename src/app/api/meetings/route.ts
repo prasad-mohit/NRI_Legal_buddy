@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 
 import { listMeetingsForCase, normalizeMeetingProvider, scheduleMeetingForCase } from "@/server/meetings";

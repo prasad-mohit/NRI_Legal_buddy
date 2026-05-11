@@ -1,20 +1,17 @@
-import prisma from "@/server/db";
-import { queryRowsUnsafe } from "@/server/sql-rows";
+﻿import prisma from "@/server/db";
 
 let ensured = false;
 
-interface PragmaTableInfoRow {
-  name: string;
-}
-
-const hasColumn = async (table: string, column: string) => {
-  const rows = await queryRowsUnsafe<PragmaTableInfoRow>(`PRAGMA table_info("${table}")`);
-  return rows.some((row) => row.name === column);
-};
-
 const isDuplicateColumnError = (error: unknown) => {
   const message = String((error as { message?: string })?.message ?? "").toLowerCase();
-  return message.includes("duplicate column name");
+  return message.includes("duplicate column name") || message.includes("already exists");
+};
+
+const hasColumn = async (table: string, column: string): Promise<boolean> => {
+  const rows = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+    `PRAGMA table_info('${table}')`
+  );
+  return rows.some((r: { name: string }) => r.name === column);
 };
 
 const ensureColumn = async (table: string, column: string, sqlType: string) => {
@@ -30,7 +27,7 @@ const ensureColumn = async (table: string, column: string, sqlType: string) => {
   }
 };
 
-export const ensureRuntimeSchema = async () => {
+export const ensureRuntimeSchema = async (): Promise<void> => {
   if (ensured) return;
 
   await ensureColumn("User", "role", "TEXT NOT NULL DEFAULT 'client'");

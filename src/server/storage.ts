@@ -323,7 +323,7 @@ export async function updateCase(id: string, updates: Partial<CaseRecord>) {
       stage: updates.stage,
       caseStatus: nextCaseStatus,
       stageStatus: nextStageStatus,
-      platformFeePaid: updates.platformFeePaid,
+      platformFeePaid: updates.platformFeePaid !== undefined ? (updates.platformFeePaid ? 1 : 0) : undefined,
       caseManagerId: updates.caseManagerId,
       practitionerId: updates.practitionerId,
       videoSlot: updates.videoSlot,
@@ -365,14 +365,14 @@ export async function logTimelineEntry(
   caseId: string,
   entry: CaseRecord["timeline"][number]
 ) {
-  const record = await prisma.case.findUnique({ where: { id: caseId } });
+  const record = await prisma.case.findUnique({ where: { id: caseId } }) as any;
   if (!record) throw new Error(`Case ${caseId} not found`);
-  const timeline = [...parseJson(record.timeline, [] as CaseRecord["timeline"]), entry];
-  const updated = await prisma.case.update({
+  const timeline = [...parseJson(record.timeline as string, [] as CaseRecord["timeline"]), entry];
+  await prisma.case.update({
     where: { id: caseId },
     data: { timeline: JSON.stringify(timeline) },
   });
-  const refreshed = await getCase(updated.id);
+  const refreshed = await getCase(caseId);
   if (!refreshed) {
     throw new Error(`Case ${caseId} not found`);
   }
@@ -383,33 +383,34 @@ export async function recordVideo(caseId: string, scheduledAt: string): Promise<
   reservation: VideoReservation;
   caseRecord: CaseRecord;
 }> {
+  const link = `https://meet.nri-law-buddy.com/${caseId}/${Date.now()}`;
   const reservation = await prisma.videoReservation.create({
     data: {
       caseId,
       scheduledAt,
-      link: `https://meet.nri-law-buddy.com/${caseId}/${Date.now()}`,
+      link,
     },
-  });
+  }) as any;
 
-  const record = await prisma.case.update({
+  await prisma.case.update({
     where: { id: caseId },
     data: {
       videoSlot: scheduledAt,
       stage: "video-scheduled",
-      videoLink: reservation.link,
+      videoLink: reservation.link as string ?? link,
     },
   });
-  const caseRecord = await getCase(record.id);
+  const caseRecord = await getCase(caseId);
   if (!caseRecord) {
     throw new Error(`Case ${caseId} not found`);
   }
 
   return {
     reservation: {
-      id: reservation.id,
-      caseId: reservation.caseId,
-      scheduledAt: reservation.scheduledAt,
-      link: reservation.link,
+      id: reservation.id as string,
+      caseId: reservation.caseId as string,
+      scheduledAt: reservation.scheduledAt as string,
+      link: reservation.link as string ?? link,
     },
     caseRecord,
   };
@@ -433,22 +434,22 @@ export async function addDocument(
   });
 
   // only increment documentCount; do NOT overwrite current case stage
-  const caseRecord = await prisma.case.findUnique({ where: { id: caseId } });
+  const caseRecord = await prisma.case.findUnique({ where: { id: caseId } }) as any;
   if (caseRecord) {
     await prisma.case.update({
       where: { id: caseId },
-      data: { documentCount: caseRecord.documentCount + 1 },
+      data: { documentCount: (caseRecord.documentCount as number) + 1 },
     });
   }
 
   return {
-    id: record.id,
-    caseId: record.caseId,
-    name: record.name,
-    type: record.type,
+    id: record.id as string,
+    caseId: record.caseId as string,
+    name: record.name as string,
+    type: record.type as string,
     status: record.status as VaultDocument["status"],
-    summary: record.summary,
-    uploadedAt: record.uploadedAt.toISOString(),
+    summary: record.summary as string,
+    uploadedAt: String(record.uploadedAt ?? new Date().toISOString()),
   } satisfies VaultDocument;
 }
 
@@ -464,17 +465,17 @@ export const listDocuments = async (caseId: string) => {
     type: doc.type,
     status: doc.status as VaultDocument["status"],
     summary: doc.summary,
-    uploadedAt: doc.uploadedAt.toISOString(),
+    uploadedAt: String(doc.uploadedAt ?? new Date().toISOString()),
   }));
 };
 
 export const advanceEscrow = async (caseId: string) => {
-  const record = await prisma.case.findUnique({ where: { id: caseId } });
+  const record = await prisma.case.findUnique({ where: { id: caseId } }) as any;
   if (!record) throw new Error(`Case ${caseId} not found`);
-  const milestones = parseJson(record.escrowMilestones, [] as CaseRecord["escrowMilestones"]);
+  const milestones = parseJson(record.escrowMilestones as string, [] as CaseRecord["escrowMilestones"]);
   const nextIndex = milestones.findIndex((milestone) => !milestone.unlocked);
   if (nextIndex === -1) {
-    const refreshed = await getCase(record.id);
+    const refreshed = await getCase(caseId);
     if (!refreshed) {
       throw new Error(`Case ${caseId} not found`);
     }
@@ -483,14 +484,14 @@ export const advanceEscrow = async (caseId: string) => {
   const updatedMilestones = milestones.map((milestone, index) =>
     index === nextIndex ? { ...milestone, unlocked: true } : milestone
   );
-  const updated = await prisma.case.update({
+  await prisma.case.update({
     where: { id: caseId },
     data: {
       escrowMilestones: JSON.stringify(updatedMilestones),
-      stage: nextIndex >= updatedMilestones.length - 1 ? "escrow" : record.stage,
+      stage: nextIndex >= updatedMilestones.length - 1 ? "escrow" : record.stage as string,
     },
   });
-  const refreshed = await getCase(updated.id);
+  const refreshed = await getCase(caseId);
   if (!refreshed) {
     throw new Error(`Case ${caseId} not found`);
   }

@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { randomBytes, pbkdf2Sync, createHash } from "node:crypto";
-import initSqlJs from "sql.js";
+import Database from "better-sqlite3";
 
 const rootDir = process.cwd();
 const dbPath = resolve(rootDir, "prisma", "dev.db");
@@ -20,28 +20,26 @@ const salt = randomBytes(16).toString("hex");
 const hash = pbkdf2Sync(password, salt, 120_000, 64, "sha512").toString("hex");
 const passwordHash = `${salt}:${hash}`;
 
-const SQL = await initSqlJs({
-  locateFile: (file) => resolve(rootDir, "node_modules", "sql.js", "dist", file),
-});
+const dbDir = dirname(dbPath);
+if (!existsSync(dbDir)) {
+  mkdirSync(dbDir, { recursive: true });
+}
 
-const dbFile = await readFile(dbPath).catch(() => null);
-const db = dbFile ? new SQL.Database(dbFile) : new SQL.Database();
+const db = new Database(dbPath);
+db.pragma("journal_mode = WAL");
 
-db.run(
+db.prepare(
   `INSERT OR REPLACE INTO AdminUser (id, email, displayName, role, passwordHash, createdAt)
-   VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-  [
-    `ADMIN-${Date.now()}`,
-    email,
-    displayName,
-    role,
-    passwordHash,
-  ]
+   VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+).run(
+  `ADMIN-${Date.now()}`,
+  email,
+  displayName,
+  role,
+  passwordHash,
 );
 
-const data = db.export();
-await mkdir(dirname(dbPath), { recursive: true });
-await writeFile(dbPath, Buffer.from(data));
+db.close();
 
 const checksum = createHash("sha256").update(password).digest("hex");
 console.log("Admin seed complete:");
